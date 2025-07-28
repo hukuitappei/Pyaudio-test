@@ -86,7 +86,7 @@ Streamlitを使用した高機能な音声録音・文字起こしアプリケ�
 ### 依存関係のインストール
 ```bash
 pip install -r requirements.txt
-```
+```d
 
 ### 🔒 セキュリティ設定（重要）
 
