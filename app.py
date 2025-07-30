@@ -1,6 +1,6 @@
 """
 Streamlit Cloud対応音声録音アプリ
-HTML5 Audio APIを使用したブラウザベース録音
+HTML5 Audio API + Web Speech APIを使用したブラウザベース録音・文字起こし
 """
 
 import streamlit as st
@@ -19,36 +19,63 @@ load_dotenv()
 
 # ページ設定
 st.set_page_config(
-    page_title="音声録音アプリ (HTML5版)",
+    page_title="音声録音・文字起こしアプリ (HTML5版)",
     page_icon="🎤",
     layout="wide"
 )
 
 class HTML5AudioRecorder:
-    """HTML5 Audio APIを使用した音声録音クラス"""
+    """HTML5 Audio API + Web Speech APIを使用した音声録音・文字起こしクラス"""
     
     def __init__(self):
         self.sample_rate = 44100
         self.channels = 1
         
     def create_recording_interface(self, duration=5):
-        """HTML5 Audio APIを使用した録音インターフェースを作成"""
+        """HTML5 Audio API + Web Speech APIを使用した録音・文字起こしインターフェースを作成"""
         
         # HTMLとJavaScriptコード
         html_code = f"""
         <div id="recording-container">
-            <button id="startRecording" onclick="startRecording()" style="background-color: #ff4b4b; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; margin: 5px;">
-                🎤 録音開始 ({duration}秒)
-            </button>
-            <button id="stopRecording" onclick="stopRecording()" style="background-color: #666; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; margin: 5px; display: none;">
-                ⏹️ 録音停止
-            </button>
-            <div id="recordingStatus" style="margin: 10px 0; font-weight: bold;"></div>
-            <audio id="audioPlayback" controls style="margin: 10px 0; display: none;"></audio>
-            <div id="downloadSection" style="margin: 10px 0; display: none;">
-                <button id="downloadBtn" onclick="downloadAudio()" style="background-color: #4CAF50; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer;">
-                    💾 ダウンロード
+            <div style="margin-bottom: 20px;">
+                <button id="startRecording" onclick="startRecording()" style="background-color: #ff4b4b; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; margin: 5px;">
+                    🎤 録音開始 ({duration}秒)
                 </button>
+                <button id="stopRecording" onclick="stopRecording()" style="background-color: #666; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; margin: 5px; display: none;">
+                    ⏹️ 録音停止
+                </button>
+                <button id="startTranscription" onclick="startTranscription()" style="background-color: #4CAF50; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; margin: 5px; display: none;">
+                    🎙️ リアルタイム文字起こし開始
+                </button>
+                <button id="stopTranscription" onclick="stopTranscription()" style="background-color: #ff9800; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; margin: 5px; display: none;">
+                    ⏹️ 文字起こし停止
+                </button>
+            </div>
+            
+            <div id="recordingStatus" style="margin: 10px 0; font-weight: bold;"></div>
+            <div id="transcriptionStatus" style="margin: 10px 0; font-weight: bold; color: #4CAF50;"></div>
+            
+            <div id="audioSection" style="margin: 10px 0; display: none;">
+                <h4>🎵 録音結果</h4>
+                <audio id="audioPlayback" controls style="margin: 10px 0;"></audio>
+                <div id="downloadSection" style="margin: 10px 0;">
+                    <button id="downloadBtn" onclick="downloadAudio()" style="background-color: #4CAF50; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer;">
+                        💾 ダウンロード
+                    </button>
+                </div>
+            </div>
+            
+            <div id="transcriptionSection" style="margin: 10px 0; display: none;">
+                <h4>📝 文字起こし結果</h4>
+                <div id="transcriptionResult" style="background-color: #f5f5f5; padding: 15px; border-radius: 5px; margin: 10px 0; min-height: 100px; border: 1px solid #ddd;"></div>
+                <div id="transcriptionActions" style="margin: 10px 0;">
+                    <button id="copyTranscription" onclick="copyTranscription()" style="background-color: #2196F3; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; margin: 5px;">
+                        📋 コピー
+                    </button>
+                    <button id="saveTranscription" onclick="saveTranscription()" style="background-color: #4CAF50; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; margin: 5px;">
+                        💾 保存
+                    </button>
+                </div>
             </div>
         </div>
 
@@ -58,7 +85,59 @@ class HTML5AudioRecorder:
         let audioBlob;
         let recordingStartTime;
         let recordingTimer;
+        let recognition;
+        let isTranscribing = false;
+        let transcriptionText = "";
         const recordingDuration = {duration * 1000}; // ミリ秒
+
+        // Web Speech APIの初期化
+        function initSpeechRecognition() {{
+            if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {{
+                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                recognition = new SpeechRecognition();
+                recognition.continuous = true;
+                recognition.interimResults = true;
+                recognition.lang = 'ja-JP';
+                
+                recognition.onstart = () => {{
+                    isTranscribing = true;
+                    document.getElementById('transcriptionStatus').innerHTML = '🎙️ 文字起こし中...';
+                }};
+                
+                recognition.onresult = (event) => {{
+                    let finalTranscript = '';
+                    let interimTranscript = '';
+                    
+                    for (let i = event.resultIndex; i < event.results.length; i++) {{
+                        const transcript = event.results[i][0].transcript;
+                        if (event.results[i].isFinal) {{
+                            finalTranscript += transcript;
+                        }} else {{
+                            interimTranscript += transcript;
+                        }}
+                    }}
+                    
+                    transcriptionText = finalTranscript;
+                    document.getElementById('transcriptionResult').innerHTML = 
+                        '<strong>確定:</strong> ' + finalTranscript + '<br><em>仮説:</em> ' + interimTranscript;
+                }};
+                
+                recognition.onerror = (event) => {{
+                    console.error('文字起こしエラー:', event.error);
+                    document.getElementById('transcriptionStatus').innerHTML = '❌ 文字起こしエラー: ' + event.error;
+                }};
+                
+                recognition.onend = () => {{
+                    isTranscribing = false;
+                    document.getElementById('transcriptionStatus').innerHTML = '✅ 文字起こし完了';
+                }};
+                
+                return true;
+            }} else {{
+                alert('このブラウザはWeb Speech APIをサポートしていません');
+                return false;
+            }}
+        }}
 
         async function startRecording() {{
             try {{
@@ -74,8 +153,8 @@ class HTML5AudioRecorder:
                     audioBlob = new Blob(audioChunks, {{ type: 'audio/wav' }});
                     const audioUrl = URL.createObjectURL(audioBlob);
                     document.getElementById('audioPlayback').src = audioUrl;
-                    document.getElementById('audioPlayback').style.display = 'block';
-                    document.getElementById('downloadSection').style.display = 'block';
+                    document.getElementById('audioSection').style.display = 'block';
+                    document.getElementById('startTranscription').style.display = 'inline-block';
                     
                     // Streamlitに録音完了を通知
                     window.parent.postMessage({{
@@ -116,12 +195,51 @@ class HTML5AudioRecorder:
             }}
         }}
         
+        function startTranscription() {{
+            if (initSpeechRecognition()) {{
+                recognition.start();
+                document.getElementById('startTranscription').style.display = 'none';
+                document.getElementById('stopTranscription').style.display = 'inline-block';
+                document.getElementById('transcriptionSection').style.display = 'block';
+            }}
+        }}
+        
+        function stopTranscription() {{
+            if (recognition && isTranscribing) {{
+                recognition.stop();
+                document.getElementById('startTranscription').style.display = 'inline-block';
+                document.getElementById('stopTranscription').style.display = 'none';
+            }}
+        }}
+        
         function downloadAudio() {{
             if (audioBlob) {{
                 const url = URL.createObjectURL(audioBlob);
                 const a = document.createElement('a');
                 a.href = url;
                 a.download = 'recording_' + new Date().toISOString().slice(0, 19).replace(/:/g, '-') + '.wav';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            }}
+        }}
+        
+        function copyTranscription() {{
+            if (transcriptionText) {{
+                navigator.clipboard.writeText(transcriptionText).then(() => {{
+                    alert('文字起こし結果をクリップボードにコピーしました');
+                }});
+            }}
+        }}
+        
+        function saveTranscription() {{
+            if (transcriptionText) {{
+                const blob = new Blob([transcriptionText], {{ type: 'text/plain' }});
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'transcription_' + new Date().toISOString().slice(0, 19).replace(/:/g, '-') + '.txt';
                 document.body.appendChild(a);
                 a.click();
                 document.body.removeChild(a);
@@ -249,29 +367,53 @@ def render_file_management_tab():
 
 def main():
     """メイン関数"""
-    st.title("🎤 音声録音アプリ (HTML5版)")
-    st.write("Streamlit Cloud対応のブラウザベース音声録音アプリケーション")
+    st.title("🎤 音声録音・文字起こしアプリ (HTML5版)")
+    st.write("Streamlit Cloud対応のブラウザベース音声録音・文字起こしアプリケーション")
     
     # 設定マネージャーの初期化
     settings_manager = SettingsManager()
     audio_recorder = HTML5AudioRecorder()
     
     # タブの作成
-    tab1, tab2, tab3 = st.tabs(["🎤 録音", "⚙️ 設定", "📁 ファイル管理"])
+    tab1, tab2, tab3 = st.tabs(["🎤 録音・文字起こし", "⚙️ 設定", "📁 ファイル管理"])
     
     with tab1:
-        st.subheader("🎤 音声録音")
+        st.subheader("🎤 音声録音・文字起こし")
         
         # 設定を読み込み
         settings = settings_manager.load_settings()
         duration = settings["audio"]["duration"]
         
         st.write(f"**録音時間**: {duration}秒")
-        st.write("**注意**: このアプリはブラウザのマイク権限を使用します")
+        st.write("**機能**: 録音 + リアルタイム文字起こし")
+        st.write("**注意**: このアプリはブラウザのマイク権限とWeb Speech APIを使用します")
         
-        # HTML5録音インターフェースの表示
+        # 文字起こし機能の説明
+        with st.expander("📝 文字起こし機能について"):
+            st.write("""
+            **Web Speech APIを使用したリアルタイム文字起こし**
+            
+            ✅ **特徴**:
+            - ブラウザネイティブの音声認識
+            - リアルタイム文字起こし
+            - サーバーサイド処理不要
+            - 無料で使用可能
+            
+            ✅ **対応ブラウザ**:
+            - Chrome (推奨)
+            - Edge
+            - Safari (一部制限あり)
+            
+            ✅ **使用方法**:
+            1. 録音を開始
+            2. 録音完了後、「リアルタイム文字起こし開始」をクリック
+            3. マイクに向かって話す
+            4. リアルタイムで文字起こし結果が表示されます
+            """)
+        
+        # HTML5録音・文字起こしインターフェースの表示
         html_code = audio_recorder.create_recording_interface(duration)
-        st.components.v1.html(html_code, height=300)
+        st.components.v1.html(html_code, height=400)
         
         # 録音完了時の処理
         if st.button("録音データを確認"):
@@ -285,7 +427,7 @@ def main():
     
     # フッター
     st.markdown("---")
-    st.markdown("**Streamlit Cloud対応** - HTML5 Audio APIを使用したブラウザベース録音")
+    st.markdown("**Streamlit Cloud対応** - HTML5 Audio API + Web Speech APIを使用したブラウザベース録音・文字起こし")
 
 if __name__ == "__main__":
     main() 
