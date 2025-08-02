@@ -1,6 +1,6 @@
 """
-Streamlit Cloud対応音声録音・文字起こしアプリ
-streamlit-audiorec + OpenAI Whisper APIを使用
+Streamlit Cloud対応音声録音・文字起こしアプリ（拡張版）
+streamlit-audiorec + OpenAI Whisper API + 豊富な設定機能
 """
 
 import streamlit as st
@@ -14,7 +14,23 @@ from datetime import datetime
 from dotenv import load_dotenv
 import json
 import openai
-from audiorecorder import audiorecorder
+from st_audiorec import st_audiorec
+
+# 拡張機能のインポート
+from utils_audiorec import (
+    EnhancedSettingsManager, 
+    UserDictionaryManager, 
+    CommandManager, 
+    DeviceManager,
+    save_audio_file,
+    save_transcription_file
+)
+from settings_ui_audiorec import (
+    render_enhanced_settings_tab,
+    render_user_dictionary_tab,
+    render_commands_tab,
+    render_file_management_tab
+)
 
 # 環境変数を読み込み
 load_dotenv()
@@ -68,151 +84,25 @@ class AudioTranscriptionManager:
         except Exception as e:
             return None, f"文字起こしエラー: {str(e)}"
 
-class SettingsManager:
-    """アプリケーション設定管理クラス"""
-    
-    def __init__(self):
-        self.settings_file = "settings/app_settings.json"
-        self.ensure_settings_directory()
-    
-    def ensure_settings_directory(self):
-        """設定ディレクトリの作成"""
-        os.makedirs("settings", exist_ok=True)
-    
-    def load_settings(self):
-        """設定を読み込み"""
-        default_settings = {
-            "audio": {
-                "duration": 5,
-                "gain": 1.0
-            },
-            "ui": {
-                "show_advanced_options": False,
-                "auto_save_recordings": True
-            },
-            "transcription": {
-                "auto_transcribe": False,
-                "save_transcriptions": True
-            }
-        }
-        
-        try:
-            if os.path.exists(self.settings_file):
-                with open(self.settings_file, 'r', encoding='utf-8') as f:
-                    return json.load(f)
-            else:
-                return default_settings
-        except Exception as e:
-            st.error(f"設定読み込みエラー: {e}")
-            return default_settings
-    
-    def save_settings(self, settings):
-        """設定を保存"""
-        try:
-            with open(self.settings_file, 'w', encoding='utf-8') as f:
-                json.dump(settings, f, ensure_ascii=False, indent=2)
-        except Exception as e:
-            st.error(f"設定保存エラー: {e}")
-
-def save_audio_file(audio_data, filename):
-    """音声ファイルを保存"""
-    try:
-        os.makedirs("recordings", exist_ok=True)
-        filepath = os.path.join("recordings", filename)
-        with open(filepath, "wb") as f:
-            f.write(audio_data)
-        return True
-    except Exception as e:
-        st.error(f"ファイル保存エラー: {e}")
-        return False
-
-def render_settings_tab(settings_manager):
-    """設定タブの表示"""
-    st.subheader("⚙️ 設定")
-    
-    settings = settings_manager.load_settings()
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.write("**録音設定**")
-        duration = st.slider("録音時間 (秒)", 1, 30, settings["audio"]["duration"])
-        gain = st.slider("ゲイン", 0.1, 5.0, settings["audio"]["gain"], 0.1)
-        
-        settings["audio"]["duration"] = duration
-        settings["audio"]["gain"] = gain
-    
-    with col2:
-        st.write("**UI設定**")
-        show_advanced = st.checkbox("詳細オプションを表示", settings["ui"]["show_advanced_options"])
-        auto_save = st.checkbox("録音を自動保存", settings["ui"]["auto_save_recordings"])
-        auto_transcribe = st.checkbox("自動文字起こし", settings["transcription"]["auto_transcribe"])
-        save_transcriptions = st.checkbox("文字起こし結果を保存", settings["transcription"]["save_transcriptions"])
-        
-        settings["ui"]["show_advanced_options"] = show_advanced
-        settings["ui"]["auto_save_recordings"] = auto_save
-        settings["transcription"]["auto_transcribe"] = auto_transcribe
-        settings["transcription"]["save_transcriptions"] = save_transcriptions
-    
-    if st.button("設定を保存"):
-        settings_manager.save_settings(settings)
-        st.success("✅ 設定を保存しました")
-    
-    return settings
-
-def render_file_management_tab():
-    """ファイル管理タブの表示"""
-    st.subheader("📁 ファイル管理")
-    
-    # recordingsディレクトリの確認
-    recordings_dir = "recordings"
-    os.makedirs(recordings_dir, exist_ok=True)
-    
-    # 録音ファイルの一覧表示
-    files = [f for f in os.listdir(recordings_dir) if f.endswith('.wav')]
-    
-    if not files:
-        st.info("📁 録音ファイルがありません")
-        return
-    
-    st.write(f"**録音ファイル ({len(files)}件)**")
-    
-    for file in files:
-        col1, col2, col3 = st.columns([3, 1, 1])
-        
-        with col1:
-            st.write(f"🎵 {file}")
-        
-        with col2:
-            file_path = os.path.join(recordings_dir, file)
-            with open(file_path, "rb") as f:
-                st.download_button(
-                    label="📥 ダウンロード",
-                    data=f.read(),
-                    file_name=file,
-                    mime="audio/wav"
-                )
-        
-        with col3:
-            if st.button(f"🗑️ 削除", key=f"delete_{file}"):
-                try:
-                    os.remove(file_path)
-                    st.success(f"✅ {file} を削除しました")
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"❌ 削除エラー: {e}")
+# 設定管理クラスは utils_audiorec.py に移動済み
 
 def main():
     """メイン関数"""
-    st.title("🎤 音声録音・文字起こしアプリ (streamlit-audiorec版)")
+    st.title("🎤 音声録音・文字起こしアプリ（拡張版）")
     st.write("Streamlit Cloud対応のブラウザベース音声録音・文字起こしアプリケーション")
     
     # 設定マネージャーの初期化
-    settings_manager = SettingsManager()
+    settings_manager = EnhancedSettingsManager()
     transcription_manager = AudioTranscriptionManager()
     
     # タブの作成
-    tab1, tab2, tab3 = st.tabs(["🎤 録音・文字起こし", "⚙️ 設定", "📁 ファイル管理"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+        "🎤 録音・文字起こし", 
+        "⚙️ 拡張設定", 
+        "📚 ユーザー辞書", 
+        "⚡ コマンド管理", 
+        "📁 ファイル管理"
+    ])
     
     with tab1:
         st.subheader("🎤 音声録音・文字起こし")
@@ -220,7 +110,7 @@ def main():
         # 設定を読み込み
         settings = settings_manager.load_settings()
         
-        st.write("**機能**: streamlit-audiorec + OpenAI Whisper API")
+        st.write("**機能**: streamlit-audiorec + OpenAI Whisper API + 拡張設定機能")
         st.write("**注意**: このアプリはブラウザのマイク権限を使用します")
         
         # 文字起こし機能の説明
@@ -246,15 +136,15 @@ def main():
         st.write("### 🎤 録音")
         
         # 録音ボタン
-        audio = audiorecorder("🎤 録音開始", "⏹️ 録音停止")
+        audio = st_audiorec()
         
         if audio is not None:
-            # 録音データの処理
-            audio_data = audio.export()
+            # 録音データの処理（st_audiorecは直接bytesを返す）
+            audio_data = audio
             
-            # 録音情報の表示
-            st.write(f"**録音時間**: {len(audio)}秒")
-            st.write(f"**サンプルレート**: {audio.sample_rate}Hz")
+            # 録音情報の表示（簡易版）
+            st.write("**録音完了**")
+            st.write(f"**データサイズ**: {len(audio_data)} bytes")
             
             # 音声プレイヤー
             st.audio(audio_data, format="audio/wav")
@@ -288,14 +178,10 @@ def main():
                         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                         filename = f"transcription_{timestamp}.txt"
                         
-                        try:
-                            os.makedirs("transcriptions", exist_ok=True)
-                            filepath = os.path.join("transcriptions", filename)
-                            with open(filepath, "w", encoding="utf-8") as f:
-                                f.write(st.session_state['transcription'])
+                        if save_transcription_file(st.session_state['transcription'], filename):
                             st.success(f"✅ 文字起こし結果を保存しました: {filename}")
-                        except Exception as e:
-                            st.error(f"❌ 保存エラー: {e}")
+                        else:
+                            st.error("❌ 保存エラーが発生しました")
                     else:
                         st.warning("文字起こし結果がありません")
             
@@ -310,14 +196,25 @@ def main():
                     st.code(st.session_state['transcription'])
     
     with tab2:
-        settings = render_settings_tab(settings_manager)
+        settings = render_enhanced_settings_tab(settings_manager)
+        if st.button("💾 設定を保存"):
+            if settings_manager.save_settings(settings):
+                st.success("✅ 設定を保存しました")
+            else:
+                st.error("❌ 設定の保存に失敗しました")
     
     with tab3:
+        render_user_dictionary_tab()
+    
+    with tab4:
+        render_commands_tab()
+    
+    with tab5:
         render_file_management_tab()
     
     # フッター
     st.markdown("---")
-    st.markdown("**Streamlit Cloud対応** - streamlit-audiorec + OpenAI Whisper APIを使用したブラウザベース録音・文字起こし")
+    st.markdown("**Streamlit Cloud対応** - streamlit-audiorec + OpenAI Whisper API + 拡張設定機能を使用したブラウザベース録音・文字起こし")
 
 if __name__ == "__main__":
     main() 

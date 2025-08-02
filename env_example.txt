@@ -1,8 +1,13 @@
-# OpenAI API設定
+# API Keys for LLM Services
+# Copy this file to .env and fill in your actual API keys
+
+# OpenAI API Key
 OPENAI_API_KEY=your_openai_api_key_here
 
-# その他のAPI設定（必要に応じて）
+# Anthropic API Key  
 ANTHROPIC_API_KEY=your_anthropic_api_key_here
+
+# Google Generative AI API Key
 GOOGLE_API_KEY=your_google_api_key_here
 
 # Other configuration
