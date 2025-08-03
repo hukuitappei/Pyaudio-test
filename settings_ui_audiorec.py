@@ -4,20 +4,14 @@ app_audiorec.py用の拡張設定UIコンポーネント
 """
 
 import streamlit as st
+import json
 import os
+from datetime import datetime, date
 from utils_audiorec import (
-    EnhancedSettingsManager, 
-    UserDictionaryManager, 
-    CommandManager, 
-    DeviceManager,
-    TaskManager,
-    CalendarManager,
-    TaskAnalyzer,
-    EventAnalyzer,
-    save_audio_file,
-    save_transcription_file
+    EnhancedSettingsManager, CommandManager, UserDictionaryManager,
+    TaskManager, CalendarManager, TaskAnalyzer, EventAnalyzer,
+    GoogleCalendarManager
 )
-from datetime import date
 
 def render_enhanced_settings_tab(settings_manager):
     """拡張設定タブの表示"""
@@ -661,3 +655,128 @@ def render_calendar_management_tab():
                     st.write(f"**作成日**: {event['created_at'][:10]}")
         else:
             st.info("イベントがありません") 
+
+def render_google_calendar_tab():
+    """Googleカレンダー連携タブをレンダリング"""
+    st.header("📅 Googleカレンダー連携")
+    
+    # Googleカレンダーマネージャーを初期化
+    google_calendar = GoogleCalendarManager()
+    
+    # タブを作成
+    tab1, tab2, tab3, tab4 = st.tabs([
+        "🔐 認証設定", 
+        "📋 カレンダー一覧", 
+        "🔄 同期", 
+        "📝 イベント管理"
+    ])
+    
+    with tab1:
+        st.subheader("Google認証設定")
+        
+        # 認証ファイルの確認
+        if os.path.exists('credentials.json'):
+            st.success("✅ credentials.jsonファイルが見つかりました")
+            
+            # 認証ボタン
+            if st.button("🔐 Google認証を実行"):
+                with st.spinner("Google認証を実行中..."):
+                    if google_calendar.authenticate():
+                        st.success("✅ Google認証が完了しました")
+                    else:
+                        st.error("❌ Google認証に失敗しました")
+        else:
+            st.error("❌ credentials.jsonファイルが見つかりません")
+            st.info("""
+            **Google認証ファイルの設定手順:**
+            
+            1. [Google Cloud Console](https://console.cloud.google.com/)にアクセス
+            2. 新しいプロジェクトを作成
+            3. Google Calendar APIを有効化
+            4. 認証情報を作成（OAuth 2.0クライアントID）
+            5. credentials.jsonファイルをダウンロード
+            6. このファイルをプロジェクトのルートディレクトリに配置
+            """)
+    
+    with tab2:
+        st.subheader("利用可能なカレンダー")
+        
+        if st.button("📋 カレンダー一覧を取得"):
+            with st.spinner("カレンダー一覧を取得中..."):
+                calendars = google_calendar.get_calendars()
+                
+                if calendars:
+                    st.success(f"✅ {len(calendars)}個のカレンダーが見つかりました")
+                    
+                    for calendar in calendars:
+                        with st.expander(f"📅 {calendar.get('summary', '無題')}"):
+                            st.write(f"**ID:** {calendar.get('id', 'N/A')}")
+                            st.write(f"**説明:** {calendar.get('description', '説明なし')}")
+                            st.write(f"**アクセス権限:** {calendar.get('accessRole', 'N/A')}")
+                            st.write(f"**プライマリ:** {'はい' if calendar.get('primary') else 'いいえ'}")
+                else:
+                    st.warning("⚠️ カレンダーが見つかりませんでした")
+    
+    with tab3:
+        st.subheader("カレンダー同期")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.subheader("📤 ローカル → Google")
+            if st.button("🔄 ローカルイベントをGoogleカレンダーに同期"):
+                # ローカルイベントを取得
+                calendar_manager = CalendarManager()
+                local_events = calendar_manager.get_all_events()
+                
+                if local_events:
+                    with st.spinner("Googleカレンダーに同期中..."):
+                        if google_calendar.sync_local_to_google(local_events):
+                            st.success("✅ 同期が完了しました")
+                        else:
+                            st.error("❌ 同期に失敗しました")
+                else:
+                    st.warning("⚠️ 同期するローカルイベントがありません")
+        
+        with col2:
+            st.subheader("📥 Google → ローカル")
+            if st.button("🔄 Googleカレンダーからローカルに同期"):
+                with st.spinner("Googleカレンダーから同期中..."):
+                    google_events = google_calendar.sync_google_to_local()
+                    
+                    if google_events:
+                        # ローカルカレンダーに追加
+                        calendar_manager = CalendarManager()
+                        for event in google_events:
+                            calendar_manager.add_event(event)
+                        
+                        st.success(f"✅ {len(google_events)}件のイベントを同期しました")
+                    else:
+                        st.warning("⚠️ 同期するGoogleカレンダーのイベントがありません")
+    
+    with tab4:
+        st.subheader("Googleカレンダーイベント管理")
+        
+        # イベント取得
+        if st.button("📋 Googleカレンダーのイベントを取得"):
+            with st.spinner("イベントを取得中..."):
+                events = google_calendar.get_events(max_results=20)
+                
+                if events:
+                    st.success(f"✅ {len(events)}件のイベントが見つかりました")
+                    
+                    for event in events:
+                        with st.expander(f"📅 {event.get('summary', '無題')}"):
+                            st.write(f"**開始:** {event['start'].get('dateTime', event['start'].get('date'))}")
+                            st.write(f"**終了:** {event['end'].get('dateTime', event['end'].get('date'))}")
+                            st.write(f"**説明:** {event.get('description', '説明なし')}")
+                            
+                            # 削除ボタン
+                            if st.button(f"🗑️ 削除", key=f"delete_{event['id']}"):
+                                if google_calendar.delete_event(event['id']):
+                                    st.success("✅ イベントを削除しました")
+                                    st.rerun()
+                                else:
+                                    st.error("❌ 削除に失敗しました")
+                else:
+                    st.warning("⚠️ イベントが見つかりませんでした") 

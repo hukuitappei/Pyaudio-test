@@ -10,7 +10,7 @@ import io
 import base64
 import os
 import tempfile
-from datetime import datetime
+from datetime import datetime, date
 from dotenv import load_dotenv
 import json
 import openai
@@ -35,7 +35,8 @@ from settings_ui_audiorec import (
     render_commands_tab,
     render_file_management_tab,
     render_task_management_tab,
-    render_calendar_management_tab
+    render_calendar_management_tab,
+    render_google_calendar_tab
 )
 
 # 環境変数を読み込み
@@ -44,8 +45,9 @@ load_dotenv()
 # ページ設定
 st.set_page_config(
     page_title="音声録音・文字起こしアプリ (streamlit-audiorec版)",
-    page_icon="🎤",
-    layout="wide"
+    page_icon="��",
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
 
 class AudioTranscriptionManager:
@@ -125,77 +127,73 @@ class AudioTranscriptionManager:
 
 def main():
     """メイン関数"""
-    st.title("🎤 音声録音・文字起こしアプリ（拡張版）")
-    st.write("Streamlit Cloud対応のブラウザベース音声録音・文字起こしアプリケーション")
+    st.set_page_config(
+        page_title="音声録音・文字起こしアプリ",
+        page_icon="🎤",
+        layout="wide",
+        initial_sidebar_state="expanded"
+    )
     
-    # ショートカットキー機能の追加
+    # カスタムCSS
     st.markdown("""
-    <script>
-    document.addEventListener('keydown', function(event) {
-        // Ctrl+T: タスク追加
-        if (event.ctrlKey && event.key === 't') {
-            event.preventDefault();
-            // タスク追加ボタンをクリック
-            const taskButton = document.querySelector('[data-testid="stButton"]');
-            if (taskButton) taskButton.click();
-        }
-        
-        // Ctrl+E: イベント追加
-        if (event.ctrlKey && event.key === 'e') {
-            event.preventDefault();
-            // イベント追加ボタンをクリック
-            const eventButton = document.querySelector('[data-testid="stButton"]');
-            if (eventButton) eventButton.click();
-        }
-        
-        // F11: 文字起こし
-        if (event.key === 'F11') {
-            event.preventDefault();
-            // 文字起こしボタンをクリック
-            const transcribeButton = document.querySelector('[data-testid="stButton"]');
-            if (transcribeButton) transcribeButton.click();
-        }
-    });
-    </script>
+    <style>
+    .main-header {
+        font-size: 2.5rem;
+        font-weight: bold;
+        color: #1f77b4;
+        text-align: center;
+        margin-bottom: 2rem;
+    }
+    .feature-card {
+        background-color: #f0f2f6;
+        padding: 1rem;
+        border-radius: 0.5rem;
+        margin: 0.5rem 0;
+    }
+    .shortcut-key {
+        background-color: #e0e0e0;
+        padding: 0.2rem 0.5rem;
+        border-radius: 0.3rem;
+        font-family: monospace;
+        font-weight: bold;
+    }
+    </style>
     """, unsafe_allow_html=True)
     
-    # ショートカットキーの説明
-    with st.expander("⌨️ ショートカットキー"):
-        st.write("""
-        **キーボードショートカット**:
-        
-        - **Ctrl+T**: タスク追加
-        - **Ctrl+E**: イベント追加
-        - **F11**: 文字起こし開始
-        - **Ctrl+S**: 文字起こし結果保存
-        - **Ctrl+Shift+T**: タスク管理タブを開く
-        - **Ctrl+Shift+E**: カレンダータブを開く
-        
-        ⚠️ **注意**: ブラウザの設定によっては一部のショートカットが無効になる場合があります
-        """)
+    # ヘッダー
+    st.markdown('<h1 class="main-header">🎤 音声録音・文字起こしアプリ</h1>', unsafe_allow_html=True)
     
-    # 設定マネージャーの初期化
-    settings_manager = EnhancedSettingsManager()
-    transcription_manager = AudioTranscriptionManager()
-    task_manager = TaskManager()
-    calendar_manager = CalendarManager()
+    # セッション状態の初期化
+    if 'audio_transcription_manager' not in st.session_state:
+        st.session_state.audio_transcription_manager = AudioTranscriptionManager()
     
-    # タブの作成
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
-        "🎤 録音・文字起こし", 
-        "📋 タスク管理",
+    if 'settings_manager' not in st.session_state:
+        st.session_state.settings_manager = EnhancedSettingsManager()
+    
+    if 'detected_tasks' not in st.session_state:
+        st.session_state.detected_tasks = []
+    
+    if 'detected_events' not in st.session_state:
+        st.session_state.detected_events = []
+    
+    # タブを作成
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
+        "🎤 録音・文字起こし",
+        "⚙️ 設定",
+        "📋 タスク管理", 
         "📅 カレンダー",
-        "⚙️ 拡張設定", 
-        "📚 ユーザー辞書", 
-        "⚡ コマンド管理", 
+        "🌐 Googleカレンダー",
+        "📚 コマンド管理",
+        "📖 ユーザー辞書",
         "📁 ファイル管理"
     ])
     
+    # 録音・文字起こしタブ
     with tab1:
         st.subheader("🎤 音声録音・文字起こし")
         
         # 設定を読み込み
-        settings = settings_manager.load_settings()
+        settings = st.session_state.settings_manager.load_settings()
         
         st.write("**機能**: streamlit-audiorec + OpenAI Whisper API + 拡張設定機能")
         st.write("**注意**: このアプリはブラウザのマイク権限を使用します")
@@ -253,14 +251,14 @@ def main():
             with col1:
                 if st.button("🎙️ 文字起こし開始"):
                     with st.spinner("文字起こし中..."):
-                        transcription, error = transcription_manager.transcribe_audio(audio_data)
+                        transcription, error = st.session_state.audio_transcription_manager.transcribe_audio(audio_data)
                         
                         if transcription:
                             st.session_state['transcription'] = transcription
                             st.success("✅ 文字起こし完了")
                             
                             # タスク・イベント分析
-                            tasks, events, analysis_errors = transcription_manager.analyze_transcription_for_tasks_and_events(transcription)
+                            tasks, events, analysis_errors = st.session_state.audio_transcription_manager.analyze_transcription_for_tasks_and_events(transcription)
                             
                             if tasks or events:
                                 st.session_state['detected_tasks'] = tasks
@@ -311,7 +309,7 @@ def main():
                                 st.write(f"• {task['title']}")
                             with col2:
                                 if st.button(f"➕ タスク追加", key=f"add_task_{i}"):
-                                    if task_manager.add_task(
+                                    if TaskManager().add_task(
                                         title=task['title'],
                                         description=task['description'],
                                         priority=task.get('priority', 'medium'),
@@ -330,7 +328,7 @@ def main():
                                 st.write(f"• {event['title']}")
                             with col2:
                                 if st.button(f"➕ イベント追加", key=f"add_event_{i}"):
-                                    if calendar_manager.add_event(
+                                    if CalendarManager().add_event(
                                         title=event['title'],
                                         description=event['description'],
                                         category=event.get('category', '音声文字起こし')
@@ -339,32 +337,60 @@ def main():
                                     else:
                                         st.error("❌ イベントの追加に失敗しました")
     
+    # 設定タブ
     with tab2:
+        render_enhanced_settings_tab(st.session_state.settings_manager)
+    
+    # タスク管理タブ
+    with tab3:
         render_task_management_tab()
     
-    with tab3:
+    # カレンダータブ
+    with tab4:
         render_calendar_management_tab()
     
-    with tab4:
-        settings = render_enhanced_settings_tab(settings_manager)
-        if st.button("💾 設定を保存"):
-            if settings_manager.save_settings(settings):
-                st.success("✅ 設定を保存しました")
-            else:
-                st.error("❌ 設定の保存に失敗しました")
-    
+    # Googleカレンダータブ
     with tab5:
-        render_user_dictionary_tab()
+        render_google_calendar_tab()
     
+    # コマンド管理タブ
     with tab6:
         render_commands_tab()
     
+    # ユーザー辞書タブ
     with tab7:
+        render_user_dictionary_tab()
+    
+    # ファイル管理タブ
+    with tab8:
         render_file_management_tab()
+    
+    # ショートカットキー説明
+    with st.expander("⌨️ ショートカットキー"):
+        st.markdown("""
+        **録音・文字起こし:**
+        - `F11`: 録音開始/停止
+        - `Ctrl+S`: 文字起こし結果を保存
+        
+        **タスク・イベント管理:**
+        - `Ctrl+T`: タスク追加
+        - `Ctrl+E`: イベント追加
+        - `Ctrl+Shift+T`: タスク管理タブを開く
+        - `Ctrl+Shift+E`: カレンダータブを開く
+        
+        **Googleカレンダー:**
+        - `Ctrl+Shift+G`: Googleカレンダータブを開く
+        """)
     
     # フッター
     st.markdown("---")
-    st.markdown("**Streamlit Cloud対応** - streamlit-audiorec + OpenAI Whisper API + 拡張設定機能 + タスク・カレンダー管理を使用したブラウザベース録音・文字起こし")
+    st.markdown("""
+    <div style='text-align: center; color: #666;'>
+        <p>🎤 音声録音・文字起こしアプリ | 
+        📋 タスク管理 | 📅 カレンダー管理 | 🌐 Googleカレンダー連携 | 
+        🤖 AI自動判定 | ⌨️ ショートカットキー対応</p>
+    </div>
+    """, unsafe_allow_html=True)
 
 if __name__ == "__main__":
     main() 

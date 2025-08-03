@@ -60,5 +60,9 @@ recordings/*
 *.pem
 secrets/
 
+# Google OAuth credentials
+credentials.json
+token.pickle
+
 # Specstory (AI conversation history - may contain sensitive data)
 .specstory/ 
