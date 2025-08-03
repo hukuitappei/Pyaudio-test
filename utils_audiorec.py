@@ -324,7 +324,37 @@ class DeviceManager:
     
     def get_available_devices(self):
         """利用可能なデバイスを取得（簡易版）"""
-        # 実際のデバイス検出は複雑なため、簡易版を提供
+        try:
+            # pyaudioが利用可能な場合は実際のデバイスを検出
+            import pyaudio
+            p = pyaudio.PyAudio()
+            devices = []
+            
+            for i in range(p.get_device_count()):
+                try:
+                    device_info = p.get_device_info_by_index(i)
+                    if device_info['maxInputChannels'] > 0:  # 入力デバイスのみ
+                        devices.append({
+                            "index": i,
+                            "name": device_info['name'],
+                            "channels": device_info['maxInputChannels'],
+                            "sample_rate": int(device_info['defaultSampleRate'])
+                        })
+                except Exception:
+                    continue
+            
+            p.terminate()
+            return devices if devices else self._get_default_devices()
+            
+        except ImportError:
+            # pyaudioが利用できない場合はデフォルトデバイスを返す
+            return self._get_default_devices()
+        except Exception:
+            # その他のエラーの場合もデフォルトデバイスを返す
+            return self._get_default_devices()
+    
+    def _get_default_devices(self):
+        """デフォルトデバイスリストを返す"""
         return [
             {"index": 0, "name": "デフォルトマイク", "channels": 1, "sample_rate": 44100},
             {"index": 1, "name": "ヘッドセット マイク", "channels": 1, "sample_rate": 44100},

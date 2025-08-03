@@ -10,7 +10,7 @@ from datetime import datetime, date
 from utils_audiorec import (
     EnhancedSettingsManager, CommandManager, UserDictionaryManager,
     TaskManager, CalendarManager, TaskAnalyzer, EventAnalyzer,
-    GoogleCalendarManager
+    GoogleCalendarManager, DeviceManager
 )
 
 def render_enhanced_settings_tab(settings_manager):
