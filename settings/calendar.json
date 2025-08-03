@@ -1,0 +1,31 @@
+{
+  "events": {
+    "sample-event-1": {
+      "id": "sample-event-1",
+      "title": "音声録音アプリのデモ",
+      "description": "新しい機能のデモンストレーションを行う",
+      "start_date": "2025-01-27T14:00:00.000000",
+      "end_date": "2025-01-27T15:00:00.000000",
+      "all_day": false,
+      "category": "work",
+      "created_at": "2025-01-26T10:00:00.000000",
+      "updated_at": "2025-01-26T10:00:00.000000"
+    },
+    "sample-event-2": {
+      "id": "sample-event-2",
+      "title": "チームミーティング",
+      "description": "週次チームミーティング",
+      "start_date": "2025-01-28T10:00:00.000000",
+      "end_date": "2025-01-28T11:00:00.000000",
+      "all_day": false,
+      "category": "work",
+      "created_at": "2025-01-26T09:00:00.000000",
+      "updated_at": "2025-01-26T09:00:00.000000"
+    }
+  },
+  "metadata": {
+    "created_at": "2025-01-26T09:00:00.000000",
+    "last_updated": "2025-01-26T10:00:00.000000",
+    "total_events": 2
+  }
+} 

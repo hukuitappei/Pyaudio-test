@@ -1,0 +1,31 @@
+{
+  "tasks": {
+    "sample-task-1": {
+      "id": "sample-task-1",
+      "title": "音声録音アプリのテスト",
+      "description": "新機能のタスク管理機能をテストする",
+      "priority": "high",
+      "due_date": null,
+      "category": "work",
+      "status": "pending",
+      "created_at": "2025-01-26T10:00:00.000000",
+      "updated_at": "2025-01-26T10:00:00.000000"
+    },
+    "sample-task-2": {
+      "id": "sample-task-2",
+      "title": "READMEファイルの更新",
+      "description": "新しい機能についてREADMEを更新する",
+      "priority": "medium",
+      "due_date": null,
+      "category": "work",
+      "status": "completed",
+      "created_at": "2025-01-26T09:00:00.000000",
+      "updated_at": "2025-01-26T10:30:00.000000"
+    }
+  },
+  "metadata": {
+    "created_at": "2025-01-26T09:00:00.000000",
+    "last_updated": "2025-01-26T10:30:00.000000",
+    "total_tasks": 2
+  }
+} 

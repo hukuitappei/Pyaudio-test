@@ -9,8 +9,15 @@ from utils_audiorec import (
     EnhancedSettingsManager, 
     UserDictionaryManager, 
     CommandManager, 
-    DeviceManager
+    DeviceManager,
+    TaskManager,
+    CalendarManager,
+    TaskAnalyzer,
+    EventAnalyzer,
+    save_audio_file,
+    save_transcription_file
 )
+from datetime import date
 
 def render_enhanced_settings_tab(settings_manager):
     """拡張設定タブの表示"""
@@ -399,3 +406,258 @@ def render_file_management_tab():
                     st.rerun()
                 except Exception as e:
                     st.error(f"❌ 削除エラー: {e}") 
+
+def render_task_management_tab():
+    """タスク管理タブのレンダリング"""
+    st.subheader("📋 タスク管理")
+    
+    # タスクマネージャーの初期化
+    task_manager = TaskManager()
+    
+    # タブの作成
+    task_tab1, task_tab2, task_tab3 = st.tabs(["📝 タスク一覧", "➕ タスク追加", "⚙️ タスク設定"])
+    
+    with task_tab1:
+        st.write("### 📝 タスク一覧")
+        
+        # フィルター
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            status_filter = st.selectbox(
+                "ステータス",
+                ["all", "pending", "in_progress", "completed"],
+                format_func=lambda x: {"all": "すべて", "pending": "未完了", "in_progress": "進行中", "completed": "完了"}[x]
+            )
+        
+        with col2:
+            priority_filter = st.selectbox(
+                "優先度",
+                ["all", "high", "medium", "low"],
+                format_func=lambda x: {"all": "すべて", "high": "高", "medium": "中", "low": "低"}[x]
+            )
+        
+        with col3:
+            category_filter = st.selectbox(
+                "カテゴリ",
+                ["all", "general", "work", "personal", "音声文字起こし"],
+                format_func=lambda x: {"all": "すべて", "general": "一般", "work": "仕事", "personal": "個人", "音声文字起こし": "音声文字起こし"}[x]
+            )
+        
+        # タスクの読み込みとフィルター
+        tasks = task_manager.load_tasks()
+        filtered_tasks = {}
+        
+        for task_id, task in tasks["tasks"].items():
+            # ステータスフィルター
+            if status_filter != "all" and task["status"] != status_filter:
+                continue
+            
+            # 優先度フィルター
+            if priority_filter != "all" and task["priority"] != priority_filter:
+                continue
+            
+            # カテゴリフィルター
+            if category_filter != "all" and task["category"] != category_filter:
+                continue
+            
+            filtered_tasks[task_id] = task
+        
+        # タスクの表示
+        if filtered_tasks:
+            for task_id, task in filtered_tasks.items():
+                with st.expander(f"📋 {task['title']}"):
+                    col1, col2 = st.columns([3, 1])
+                    
+                    with col1:
+                        st.write(f"**説明**: {task['description']}")
+                        st.write(f"**優先度**: {task['priority']}")
+                        st.write(f"**カテゴリ**: {task['category']}")
+                        if task['due_date']:
+                            st.write(f"**期限**: {task['due_date']}")
+                        st.write(f"**作成日**: {task['created_at'][:10]}")
+                    
+                    with col2:
+                        # ステータス変更
+                        new_status = st.selectbox(
+                            "ステータス",
+                            ["pending", "in_progress", "completed"],
+                            index=["pending", "in_progress", "completed"].index(task["status"]),
+                            key=f"status_{task_id}"
+                        )
+                        
+                        if new_status != task["status"]:
+                            task_manager.update_task(task_id, status=new_status)
+                            st.success("ステータスを更新しました")
+                        
+                        # 削除ボタン
+                        if st.button("🗑️ 削除", key=f"delete_{task_id}"):
+                            if task_manager.delete_task(task_id):
+                                st.success("タスクを削除しました")
+                                st.rerun()
+        else:
+            st.info("タスクがありません")
+    
+    with task_tab2:
+        st.write("### ➕ タスク追加")
+        
+        with st.form("add_task_form"):
+            title = st.text_input("タイトル *")
+            description = st.text_area("説明")
+            
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                priority = st.selectbox("優先度", ["low", "medium", "high"])
+            with col2:
+                category = st.selectbox("カテゴリ", ["general", "work", "personal", "音声文字起こし"])
+            with col3:
+                due_date = st.date_input("期限")
+            
+            submitted = st.form_submit_button("タスクを追加")
+            
+            if submitted and title:
+                if task_manager.add_task(
+                    title=title,
+                    description=description,
+                    priority=priority,
+                    due_date=due_date.isoformat() if due_date else None,
+                    category=category
+                ):
+                    st.success("タスクを追加しました")
+                else:
+                    st.error("タスクの追加に失敗しました")
+    
+    with task_tab3:
+        st.write("### ⚙️ タスク設定")
+        
+        # 統計情報
+        tasks = task_manager.load_tasks()
+        total_tasks = len(tasks["tasks"])
+        pending_tasks = len([t for t in tasks["tasks"].values() if t["status"] == "pending"])
+        completed_tasks = len([t for t in tasks["tasks"].values() if t["status"] == "completed"])
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("総タスク数", total_tasks)
+        with col2:
+            st.metric("未完了タスク", pending_tasks)
+        with col3:
+            st.metric("完了タスク", completed_tasks)
+        
+        # 一括操作
+        st.write("### 一括操作")
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            if st.button("🗑️ 完了タスクを削除"):
+                for task_id, task in tasks["tasks"].items():
+                    if task["status"] == "completed":
+                        task_manager.delete_task(task_id)
+                st.success("完了タスクを削除しました")
+        
+        with col2:
+            if st.button("📊 統計をリセット"):
+                st.info("統計情報をリセットしました")
+
+def render_calendar_management_tab():
+    """カレンダー管理タブのレンダリング"""
+    st.subheader("📅 カレンダー管理")
+    
+    # カレンダーマネージャーの初期化
+    calendar_manager = CalendarManager()
+    
+    # タブの作成
+    cal_tab1, cal_tab2, cal_tab3 = st.tabs(["📅 カレンダー", "➕ イベント追加", "📊 イベント一覧"])
+    
+    with cal_tab1:
+        st.write("### 📅 カレンダー")
+        
+        # 日付選択
+        selected_date = st.date_input("日付を選択", value=date.today())
+        
+        # 選択された日付のイベントを取得
+        events = calendar_manager.get_events_by_date(selected_date)
+        
+        if events:
+            st.write(f"**{selected_date} のイベント**")
+            for event_id, event in events.items():
+                with st.expander(f"📅 {event['title']}"):
+                    st.write(f"**説明**: {event['description']}")
+                    st.write(f"**カテゴリ**: {event['category']}")
+                    if event['start_date']:
+                        st.write(f"**開始**: {event['start_date']}")
+                    if event['end_date']:
+                        st.write(f"**終了**: {event['end_date']}")
+                    
+                    # 削除ボタン
+                    if st.button("🗑️ 削除", key=f"delete_event_{event_id}"):
+                        if calendar_manager.delete_event(event_id):
+                            st.success("イベントを削除しました")
+                            st.rerun()
+        else:
+            st.info(f"{selected_date} のイベントはありません")
+    
+    with cal_tab2:
+        st.write("### ➕ イベント追加")
+        
+        with st.form("add_event_form"):
+            title = st.text_input("タイトル *")
+            description = st.text_area("説明")
+            
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                start_date = st.date_input("開始日")
+            with col2:
+                end_date = st.date_input("終了日")
+            with col3:
+                category = st.selectbox("カテゴリ", ["general", "work", "personal", "音声文字起こし"])
+            
+            all_day = st.checkbox("終日")
+            
+            submitted = st.form_submit_button("イベントを追加")
+            
+            if submitted and title:
+                if calendar_manager.add_event(
+                    title=title,
+                    description=description,
+                    start_date=start_date.isoformat() if start_date else None,
+                    end_date=end_date.isoformat() if end_date else None,
+                    all_day=all_day,
+                    category=category
+                ):
+                    st.success("イベントを追加しました")
+                else:
+                    st.error("イベントの追加に失敗しました")
+    
+    with cal_tab3:
+        st.write("### 📊 イベント一覧")
+        
+        # カテゴリフィルター
+        category_filter = st.selectbox(
+            "カテゴリ",
+            ["all", "general", "work", "personal", "音声文字起こし"],
+            format_func=lambda x: {"all": "すべて", "general": "一般", "work": "仕事", "personal": "個人", "音声文字起こし": "音声文字起こし"}[x]
+        )
+        
+        # イベントの読み込みとフィルター
+        all_events = calendar_manager.load_events()
+        filtered_events = {}
+        
+        for event_id, event in all_events["events"].items():
+            if category_filter != "all" and event["category"] != category_filter:
+                continue
+            filtered_events[event_id] = event
+        
+        # イベントの表示
+        if filtered_events:
+            for event_id, event in filtered_events.items():
+                with st.expander(f"📅 {event['title']}"):
+                    st.write(f"**説明**: {event['description']}")
+                    st.write(f"**カテゴリ**: {event['category']}")
+                    if event['start_date']:
+                        st.write(f"**開始**: {event['start_date']}")
+                    if event['end_date']:
+                        st.write(f"**終了**: {event['end_date']}")
+                    st.write(f"**終日**: {'はい' if event['all_day'] else 'いいえ'}")
+                    st.write(f"**作成日**: {event['created_at'][:10]}")
+        else:
+            st.info("イベントがありません") 
