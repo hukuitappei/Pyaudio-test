@@ -3,35 +3,42 @@ app_audiorec.py用の統合ユーティリティクラス
 設定管理、デバイス管理、ユーザー辞書、コマンド処理などの機能を統合
 """
 
+# 標準ライブラリ
 import json
 import os
-import streamlit as st
-from datetime import datetime, date, timedelta
-from typing import Dict, List, Optional, Any
+import pickle
 import tempfile
-import wave
-import numpy as np
 import uuid
+import wave
+from datetime import datetime, date, timedelta
+from typing import Dict, List, Optional, Any, Union
+
+# サードパーティライブラリ
+import numpy as np
 import openai
+import streamlit as st
 from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
+from google_auth_oauthlib.flow import Flow
 from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
-import pickle
-import base64
+from googleapiclient.errors import HttpError
+
+# ローカルインポート
+from config_manager import get_secret, get_google_credentials, is_streamlit_cloud
+
 
 class EnhancedSettingsManager:
     """拡張設定管理クラス"""
     
-    def __init__(self):
+    def __init__(self) -> None:
         self.settings_file = "settings/app_settings.json"
         self.ensure_settings_directory()
     
-    def ensure_settings_directory(self):
+    def ensure_settings_directory(self) -> None:
         """設定ディレクトリの作成"""
         os.makedirs("settings", exist_ok=True)
     
-    def load_settings(self):
+    def load_settings(self) -> Dict[str, Any]:
         """設定を読み込み"""
         default_settings = {
             "audio": {
@@ -118,7 +125,7 @@ class EnhancedSettingsManager:
             st.error(f"設定読み込みエラー: {e}")
             return default_settings
     
-    def _merge_settings(self, default_settings, loaded_settings):
+    def _merge_settings(self, default_settings: Dict[str, Any], loaded_settings: Dict[str, Any]) -> Dict[str, Any]:
         """設定をマージして不足しているキーを補完"""
         merged = default_settings.copy()
         
@@ -130,7 +137,7 @@ class EnhancedSettingsManager:
         
         return merged
     
-    def save_settings(self, settings):
+    def save_settings(self, settings: Dict[str, Any]) -> bool:
         """設定を保存"""
         try:
             with open(self.settings_file, 'w', encoding='utf-8') as f:
@@ -140,14 +147,15 @@ class EnhancedSettingsManager:
             st.error(f"設定保存エラー: {e}")
             return False
 
+
 class UserDictionaryManager:
     """ユーザー辞書管理クラス"""
     
-    def __init__(self):
+    def __init__(self) -> None:
         self.dictionary_file = "settings/user_dictionary.json"
         self.dictionary = self.load_dictionary()
     
-    def load_dictionary(self):
+    def load_dictionary(self) -> Dict[str, Any]:
         """辞書を読み込み"""
         try:
             if os.path.exists(self.dictionary_file):
@@ -181,7 +189,7 @@ class UserDictionaryManager:
             st.error(f"辞書読み込みエラー: {e}")
             return {"categories": {}, "metadata": {}}
     
-    def save_dictionary(self, dictionary=None):
+    def save_dictionary(self, dictionary: Optional[Dict[str, Any]] = None) -> bool:
         """辞書を保存"""
         if dictionary is None:
             dictionary = self.dictionary
@@ -195,7 +203,7 @@ class UserDictionaryManager:
             st.error(f"辞書保存エラー: {e}")
             return False
     
-    def add_entry(self, category, term, definition, pronunciation=""):
+    def add_entry(self, category: str, term: str, definition: str, pronunciation: str = "") -> bool:
         """辞書にエントリを追加"""
         if category not in self.dictionary["categories"]:
             self.dictionary["categories"][category] = {
@@ -214,11 +222,11 @@ class UserDictionaryManager:
         
         return self.save_dictionary()
     
-    def get_entry(self, category, term):
+    def get_entry(self, category: str, term: str) -> Optional[Dict[str, Any]]:
         """辞書からエントリを取得"""
         return self.dictionary["categories"].get(category, {}).get("entries", {}).get(term)
     
-    def remove_entry(self, category, term):
+    def remove_entry(self, category: str, term: str) -> bool:
         """辞書からエントリを削除"""
         if category in self.dictionary["categories"]:
             if term in self.dictionary["categories"][category]["entries"]:
@@ -228,14 +236,15 @@ class UserDictionaryManager:
                 return self.save_dictionary()
         return False
 
+
 class CommandManager:
     """コマンド管理クラス"""
     
-    def __init__(self):
+    def __init__(self) -> None:
         self.commands_file = "settings/commands.json"
         self.commands = self.load_commands()
     
-    def load_commands(self):
+    def load_commands(self) -> Dict[str, Any]:
         """コマンドを読み込み"""
         try:
             if os.path.exists(self.commands_file):
@@ -275,7 +284,7 @@ class CommandManager:
             st.error(f"コマンド読み込みエラー: {e}")
             return {"commands": {}, "metadata": {}}
     
-    def save_commands(self, commands=None):
+    def save_commands(self, commands: Optional[Dict[str, Any]] = None) -> bool:
         """コマンドを保存"""
         if commands is None:
             commands = self.commands
@@ -289,7 +298,7 @@ class CommandManager:
             st.error(f"コマンド保存エラー: {e}")
             return False
     
-    def add_command(self, name, description, llm_prompt, output_format, enabled=True):
+    def add_command(self, name: str, description: str, llm_prompt: str, output_format: str, enabled: bool = True) -> bool:
         """コマンドを追加"""
         self.commands["commands"][name] = {
             "description": description,
@@ -303,11 +312,11 @@ class CommandManager:
         
         return self.save_commands()
     
-    def get_command(self, name):
+    def get_command(self, name: str) -> Optional[Dict[str, Any]]:
         """コマンドを取得"""
         return self.commands["commands"].get(name)
     
-    def remove_command(self, name):
+    def remove_command(self, name: str) -> bool:
         """コマンドを削除"""
         if name in self.commands["commands"]:
             del self.commands["commands"][name]
@@ -316,13 +325,14 @@ class CommandManager:
             return self.save_commands()
         return False
 
+
 class DeviceManager:
     """デバイス管理クラス（簡易版）"""
     
-    def __init__(self):
+    def __init__(self) -> None:
         self.devices = self.get_available_devices()
     
-    def get_available_devices(self):
+    def get_available_devices(self) -> List[Dict[str, Any]]:
         """利用可能なデバイスを取得（簡易版）"""
         try:
             # pyaudioが利用可能な場合は実際のデバイスを検出
@@ -353,7 +363,7 @@ class DeviceManager:
             # その他のエラーの場合もデフォルトデバイスを返す
             return self._get_default_devices()
     
-    def _get_default_devices(self):
+    def _get_default_devices(self) -> List[Dict[str, Any]]:
         """デフォルトデバイスリストを返す"""
         return [
             {"index": 0, "name": "デフォルトマイク", "channels": 1, "sample_rate": 44100},
@@ -361,32 +371,33 @@ class DeviceManager:
             {"index": 2, "name": "内蔵マイク", "channels": 1, "sample_rate": 44100}
         ]
     
-    def get_device_by_index(self, index):
+    def get_device_by_index(self, index: int) -> Optional[Dict[str, Any]]:
         """インデックスでデバイスを取得"""
         for device in self.devices:
             if device["index"] == index:
                 return device
         return None
     
-    def get_device_by_name(self, name):
+    def get_device_by_name(self, name: str) -> Optional[Dict[str, Any]]:
         """名前でデバイスを取得"""
         for device in self.devices:
             if device["name"] == name:
                 return device
         return None
 
+
 class TaskManager:
     """タスク管理クラス"""
     
-    def __init__(self):
+    def __init__(self) -> None:
         self.tasks_file = "settings/tasks.json"
         self.ensure_settings_directory()
     
-    def ensure_settings_directory(self):
+    def ensure_settings_directory(self) -> None:
         """設定ディレクトリの作成"""
         os.makedirs("settings", exist_ok=True)
     
-    def load_tasks(self):
+    def load_tasks(self) -> Dict[str, Any]:
         """タスクを読み込み"""
         default_tasks = {
             "tasks": {},
@@ -408,7 +419,7 @@ class TaskManager:
             st.error(f"タスク読み込みエラー: {str(e)}")
             return default_tasks
     
-    def _merge_tasks(self, default_tasks, loaded_tasks):
+    def _merge_tasks(self, default_tasks: Dict[str, Any], loaded_tasks: Dict[str, Any]) -> Dict[str, Any]:
         """タスクの統合"""
         merged = default_tasks.copy()
         if "tasks" in loaded_tasks:
@@ -417,7 +428,7 @@ class TaskManager:
             merged["metadata"].update(loaded_tasks["metadata"])
         return merged
     
-    def save_tasks(self, tasks=None):
+    def save_tasks(self, tasks: Optional[Dict[str, Any]] = None) -> bool:
         """タスクを保存"""
         if tasks is None:
             tasks = self.load_tasks()
@@ -433,7 +444,8 @@ class TaskManager:
             st.error(f"タスク保存エラー: {str(e)}")
             return False
     
-    def add_task(self, title, description="", priority="medium", due_date=None, category="general", status="pending"):
+    def add_task(self, title: str, description: str = "", priority: str = "medium", 
+                due_date: Optional[str] = None, category: str = "general", status: str = "pending") -> bool:
         """タスクを追加"""
         tasks = self.load_tasks()
         
@@ -453,7 +465,7 @@ class TaskManager:
         tasks["tasks"][task_id] = task
         return self.save_tasks(tasks)
     
-    def update_task(self, task_id, **kwargs):
+    def update_task(self, task_id: str, **kwargs: Any) -> bool:
         """タスクを更新"""
         tasks = self.load_tasks()
         
@@ -463,7 +475,7 @@ class TaskManager:
             return self.save_tasks(tasks)
         return False
     
-    def delete_task(self, task_id):
+    def delete_task(self, task_id: str) -> bool:
         """タスクを削除"""
         tasks = self.load_tasks()
         
@@ -472,33 +484,34 @@ class TaskManager:
             return self.save_tasks(tasks)
         return False
     
-    def get_task(self, task_id):
+    def get_task(self, task_id: str) -> Optional[Dict[str, Any]]:
         """タスクを取得"""
         tasks = self.load_tasks()
         return tasks["tasks"].get(task_id)
     
-    def get_tasks_by_status(self, status="pending"):
+    def get_tasks_by_status(self, status: str = "pending") -> Dict[str, Any]:
         """ステータス別にタスクを取得"""
         tasks = self.load_tasks()
         return {k: v for k, v in tasks["tasks"].items() if v["status"] == status}
     
-    def get_tasks_by_category(self, category):
+    def get_tasks_by_category(self, category: str) -> Dict[str, Any]:
         """カテゴリ別にタスクを取得"""
         tasks = self.load_tasks()
         return {k: v for k, v in tasks["tasks"].items() if v["category"] == category}
 
+
 class CalendarManager:
     """カレンダー管理クラス"""
     
-    def __init__(self):
+    def __init__(self) -> None:
         self.events_file = "settings/calendar.json"
         self.ensure_settings_directory()
     
-    def ensure_settings_directory(self):
+    def ensure_settings_directory(self) -> None:
         """設定ディレクトリの作成"""
         os.makedirs("settings", exist_ok=True)
     
-    def load_events(self):
+    def load_events(self) -> Dict[str, Any]:
         """イベントを読み込み"""
         default_events = {
             "events": {},
@@ -520,7 +533,7 @@ class CalendarManager:
             st.error(f"イベント読み込みエラー: {str(e)}")
             return default_events
     
-    def _merge_events(self, default_events, loaded_events):
+    def _merge_events(self, default_events: Dict[str, Any], loaded_events: Dict[str, Any]) -> Dict[str, Any]:
         """イベントの統合"""
         merged = default_events.copy()
         if "events" in loaded_events:
@@ -529,7 +542,7 @@ class CalendarManager:
             merged["metadata"].update(loaded_events["metadata"])
         return merged
     
-    def save_events(self, events=None):
+    def save_events(self, events: Optional[Dict[str, Any]] = None) -> bool:
         """イベントを保存"""
         if events is None:
             events = self.load_events()
@@ -545,7 +558,8 @@ class CalendarManager:
             st.error(f"イベント保存エラー: {str(e)}")
             return False
     
-    def add_event(self, title, description="", start_date=None, end_date=None, all_day=False, category="general"):
+    def add_event(self, title: str, description: str = "", start_date: Optional[str] = None, 
+                 end_date: Optional[str] = None, all_day: bool = False, category: str = "general") -> bool:
         """イベントを追加"""
         events = self.load_events()
         
@@ -565,7 +579,7 @@ class CalendarManager:
         events["events"][event_id] = event
         return self.save_events(events)
     
-    def update_event(self, event_id, **kwargs):
+    def update_event(self, event_id: str, **kwargs: Any) -> bool:
         """イベントを更新"""
         events = self.load_events()
         
@@ -575,7 +589,7 @@ class CalendarManager:
             return self.save_events(events)
         return False
     
-    def delete_event(self, event_id):
+    def delete_event(self, event_id: str) -> bool:
         """イベントを削除"""
         events = self.load_events()
         
@@ -584,12 +598,12 @@ class CalendarManager:
             return self.save_events(events)
         return False
     
-    def get_event(self, event_id):
+    def get_event(self, event_id: str) -> Optional[Dict[str, Any]]:
         """イベントを取得"""
         events = self.load_events()
         return events["events"].get(event_id)
     
-    def get_events_by_date(self, target_date):
+    def get_events_by_date(self, target_date: Union[date, str]) -> Dict[str, Any]:
         """日付別にイベントを取得"""
         events = self.load_events()
         target_date_str = target_date.isoformat() if isinstance(target_date, date) else str(target_date)
@@ -600,15 +614,16 @@ class CalendarManager:
                 result[event_id] = event
         return result
     
-    def get_events_by_category(self, category):
+    def get_events_by_category(self, category: str) -> Dict[str, Any]:
         """カテゴリ別にイベントを取得"""
         events = self.load_events()
         return {k: v for k, v in events["events"].items() if v["category"] == category}
 
+
 class ShortcutManager:
     """ショートカットキー管理クラス"""
     
-    def __init__(self):
+    def __init__(self) -> None:
         self.shortcuts = {
             "add_task": "Ctrl+T",
             "add_event": "Ctrl+E",
@@ -618,27 +633,28 @@ class ShortcutManager:
             "save_transcription": "Ctrl+S"
         }
     
-    def get_shortcut(self, action):
+    def get_shortcut(self, action: str) -> str:
         """ショートカットキーを取得"""
         return self.shortcuts.get(action, "")
     
-    def register_shortcut(self, action, key):
+    def register_shortcut(self, action: str, key: str) -> None:
         """ショートカットキーを登録"""
         self.shortcuts[action] = key
     
-    def handle_shortcut(self, action, callback):
+    def handle_shortcut(self, action: str, callback) -> None:
         """ショートカットキーの処理"""
         # Streamlitでは直接的なキーボードイベント処理が制限されるため、
         # ボタンクリックと組み合わせて使用
         pass
 
+
 class TaskAnalyzer:
     """タスク分析クラス"""
     
-    def __init__(self, openai_client=None):
+    def __init__(self, openai_client: Optional[openai.OpenAI] = None) -> None:
         self.openai_client = openai_client
     
-    def analyze_text_for_tasks(self, text):
+    def analyze_text_for_tasks(self, text: str) -> tuple[List[Dict[str, Any]], Optional[str]]:
         """テキストからタスクを分析"""
         if not self.openai_client:
             return [], "OpenAI APIキーが設定されていません"
@@ -670,7 +686,7 @@ class TaskAnalyzer:
         except Exception as e:
             return [], f"タスク分析エラー: {str(e)}"
     
-    def _parse_task_result(self, result):
+    def _parse_task_result(self, result: str) -> List[Dict[str, Any]]:
         """タスク結果を解析"""
         try:
             # JSON形式の結果を解析
@@ -709,7 +725,7 @@ class TaskAnalyzer:
             st.error(f"タスク解析エラー: {str(e)}")
             return []
     
-    def is_task_related(self, text):
+    def is_task_related(self, text: str) -> bool:
         """テキストがタスク関連かどうかを判定"""
         task_keywords = [
             "やる", "する", "完了", "終了", "開始", "準備", "確認", "チェック",
@@ -726,13 +742,14 @@ class TaskAnalyzer:
                 return True
         return False
 
+
 class EventAnalyzer:
     """イベント分析クラス"""
     
-    def __init__(self, openai_client=None):
+    def __init__(self, openai_client: Optional[openai.OpenAI] = None) -> None:
         self.openai_client = openai_client
     
-    def analyze_text_for_events(self, text):
+    def analyze_text_for_events(self, text: str) -> tuple[List[Dict[str, Any]], Optional[str]]:
         """テキストからイベントを分析"""
         if not self.openai_client:
             return [], "OpenAI APIキーが設定されていません"
@@ -764,7 +781,7 @@ class EventAnalyzer:
         except Exception as e:
             return [], f"イベント分析エラー: {str(e)}"
     
-    def _parse_event_result(self, result):
+    def _parse_event_result(self, result: str) -> List[Dict[str, Any]]:
         """イベント結果を解析"""
         try:
             import re
@@ -802,7 +819,7 @@ class EventAnalyzer:
             st.error(f"イベント解析エラー: {str(e)}")
             return []
     
-    def is_event_related(self, text):
+    def is_event_related(self, text: str) -> bool:
         """テキストがイベント関連かどうかを判定"""
         event_keywords = [
             "会議", "ミーティング", "打ち合わせ", "面談", "訪問", "出張",
@@ -818,49 +835,262 @@ class EventAnalyzer:
                 return True
         return False
 
+
 class GoogleCalendarManager:
-    """Googleカレンダーとの連携を管理するクラス"""
+    """GoogleカレンダーとのStreamlit対応連携クラス"""
     
     SCOPES = ['https://www.googleapis.com/auth/calendar']
     CREDENTIALS_FILE = 'credentials.json'
     TOKEN_FILE = 'token.pickle'
     
-    def __init__(self):
+    def __init__(self) -> None:
         self.service = None
-        self.credentials = None
-        
-    def authenticate(self):
-        """Google認証を実行"""
-        creds = None
-        
-        # 既存のトークンファイルを確認
-        if os.path.exists(self.TOKEN_FILE):
-            with open(self.TOKEN_FILE, 'rb') as token:
-                creds = pickle.load(token)
-        
-        # 有効な認証情報がない場合
-        if not creds or not creds.valid:
-            if creds and creds.expired and creds.refresh_token:
-                creds.refresh(Request())
-            else:
-                if not os.path.exists(self.CREDENTIALS_FILE):
-                    st.error("Google認証ファイル（credentials.json）が見つかりません。")
-                    st.info("Google Cloud Consoleで認証情報をダウンロードしてください。")
-                    return False
-                
-                flow = InstalledAppFlow.from_client_secrets_file(
-                    self.CREDENTIALS_FILE, self.SCOPES)
-                creds = flow.run_local_server(port=0)
+        self.credentials: Optional[Credentials] = None
+        self._initialize_session_state()
+    
+    def _initialize_session_state(self) -> None:
+        """Streamlitセッション状態の初期化"""
+        if 'google_auth_flow' not in st.session_state:
+            st.session_state.google_auth_flow = None
+        if 'google_credentials' not in st.session_state:
+            st.session_state.google_credentials = None
+    
+    def authenticate(self) -> bool:
+        """Google認証を実行（Streamlit対応）"""
+        try:
+            # セッション状態から認証情報を復元
+            if st.session_state.google_credentials:
+                self.credentials = st.session_state.google_credentials
+                if self._is_credentials_valid():
+                    self.service = build('calendar', 'v3', credentials=self.credentials)
+                    return True
             
-            # トークンを保存
-            with open(self.TOKEN_FILE, 'wb') as token:
-                pickle.dump(creds, token)
+                    # 環境変数またはStreamlit Secretsから認証情報を取得
+        client_id, client_secret, _ = get_google_credentials()
+            
+            if client_id and client_secret:
+                creds = self._create_credentials_from_env(client_id, client_secret)
+            else:
+                creds = self._authenticate_from_file()
+            
+            if not creds:
+                return False
+                
+            self.credentials = creds
+            st.session_state.google_credentials = creds
+            self.service = build('calendar', 'v3', credentials=creds)
+            return True
+            
+        except Exception as e:
+            st.error(f"認証エラー: {str(e)}")
+            return False
+    
+    def _is_credentials_valid(self) -> bool:
+        """認証情報の有効性を確認"""
+        if not self.credentials:
+            return False
         
-        self.credentials = creds
-        self.service = build('calendar', 'v3', credentials=creds)
+        if self.credentials.expired:
+            if self.credentials.refresh_token:
+                try:
+                    self.credentials.refresh(Request())
+                    return True
+                except Exception:
+                    return False
+            return False
+        
         return True
     
-    def get_calendars(self):
+    def _create_credentials_from_env(self, client_id: str, client_secret: str) -> Optional[Credentials]:
+        """環境変数またはStreamlit Secretsから認証情報を作成"""
+        try:
+            refresh_token = get_secret('GOOGLE_REFRESH_TOKEN')
+            
+            if not refresh_token:
+                st.warning("⚠️ GOOGLE_REFRESH_TOKENが設定されていません。初回認証が必要です。")
+                return self._handle_initial_auth(client_id, client_secret)
+            
+            # 既存の認証情報から復元
+            creds = Credentials(
+                token=None,
+                refresh_token=refresh_token,
+                token_uri="https://oauth2.googleapis.com/token",
+                client_id=client_id,
+                client_secret=client_secret,
+                scopes=self.SCOPES
+            )
+            
+            # トークンをリフレッシュ
+            if creds.expired:
+                creds.refresh(Request())
+            
+            return creds
+        except Exception as e:
+            st.error(f"環境変数からの認証情報作成に失敗しました: {e}")
+            return None
+    
+    def _handle_initial_auth(self, client_id: str, client_secret: str) -> Optional[Credentials]:
+        """初回認証の処理（Streamlit対応）"""
+        st.warning("⚠️ 初回認証が必要です。以下の手順に従ってください：")
+        
+        # 認証URLを生成
+        try:
+            client_config = {
+                "web": {
+                    "client_id": client_id,
+                    "client_secret": client_secret,
+                    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                    "token_uri": "https://oauth2.googleapis.com/token",
+                    "redirect_uris": ["urn:ietf:wg:oauth:2.0:oob"]
+                }
+            }
+            
+            flow = Flow.from_client_config(
+                client_config,
+                scopes=self.SCOPES,
+                redirect_uri="urn:ietf:wg:oauth:2.0:oob"
+            )
+            
+            auth_url, _ = flow.authorization_url(prompt='consent')
+            
+            st.info("📋 認証手順:")
+            st.markdown(f"1. [この認証URL]({auth_url})をクリック")
+            st.markdown("2. Googleアカウントでログインし、権限を許可")
+            st.markdown("3. 表示された認証コードを下のフィールドに入力")
+            
+            # 認証コード入力
+            auth_code = st.text_input("認証コードを入力してください:", key="google_auth_code")
+            
+            if auth_code and st.button("認証を完了", key="complete_google_auth"):
+                try:
+                    flow.fetch_token(code=auth_code)
+                    creds = flow.credentials
+                    
+                    # リフレッシュトークンを表示（ユーザーが環境変数に設定するため）
+                    if creds.refresh_token:
+                        st.success("✅ 認証が完了しました！")
+                        st.info("以下のリフレッシュトークンを.envファイルのGOOGLE_REFRESH_TOKENに設定してください:")
+                        st.code(creds.refresh_token)
+                        
+                        # セッション状態に保存
+                        st.session_state.google_credentials = creds
+                        return creds
+                    else:
+                        st.error("❌ リフレッシュトークンの取得に失敗しました")
+                        
+                except Exception as e:
+                    st.error(f"❌ 認証コードの処理に失敗しました: {e}")
+            
+            return None
+            
+        except Exception as e:
+            st.error(f"認証フローの初期化に失敗しました: {e}")
+            return None
+    
+    def _authenticate_from_file(self) -> Optional[Credentials]:
+        """ファイルベースの認証（開発用・Streamlit非対応）"""
+        st.warning("⚠️ ファイルベース認証はStreamlit環境では制限があります。")
+        st.info("環境変数による認証を推奨します。setup_google_auth.pyを実行してください。")
+        
+        # 既存のトークンファイルがあるかチェック
+        if os.path.exists(self.TOKEN_FILE):
+            try:
+                with open(self.TOKEN_FILE, 'rb') as token:
+                    creds = pickle.load(token)
+                
+                if creds and self._is_credentials_valid():
+                    return creds
+            except Exception as e:
+                st.error(f"トークンファイルの読み込みに失敗しました: {e}")
+        
+        # credentials.jsonファイルの確認
+        if not os.path.exists(self.CREDENTIALS_FILE):
+            st.error("❌ credentials.jsonファイルが見つかりません")
+            st.info("setup_google_auth.pyを実行して認証を設定してください")
+            return None
+        
+        st.error("❌ ファイルベース認証はStreamlit環境では完全にサポートされていません")
+        st.info("💡 解決方法: 環境変数による認証を使用してください")
+        return None
+    
+    def get_authentication_status(self) -> str:
+        """認証状態を確認"""
+        if not self.credentials:
+            return "未認証"
+        
+        if self.credentials.expired:
+            return "認証期限切れ"
+        
+        return "認証済み"
+    
+    def setup_web_authentication(self) -> None:
+        """Streamlit用の認証設定を表示"""
+        st.subheader("🔐 Googleカレンダー認証設定")
+        
+        # 現在の認証状態を表示
+        auth_status = self.get_authentication_status()
+        if auth_status == "認証済み":
+            st.success(f"✅ {auth_status}")
+        else:
+            st.warning(f"⚠️ {auth_status}")
+        
+        # 認証方法の説明
+        st.info("📋 認証設定手順:")
+        
+        with st.expander("🔧 環境変数による認証設定（推奨）"):
+            st.markdown("""
+            **手順:**
+            1. Google Cloud Consoleでプロジェクトを作成
+            2. Google Calendar APIを有効化
+            3. OAuth 2.0認証情報を作成
+            4. 以下の環境変数を設定:
+            """)
+            
+            st.code("""
+GOOGLE_CLIENT_ID=your_client_id
+GOOGLE_CLIENT_SECRET=your_client_secret
+GOOGLE_REFRESH_TOKEN=your_refresh_token  # 初回認証後に取得
+            """)
+            
+            st.markdown("5. `setup_google_auth.py`を実行して設定を完了")
+        
+        # 環境変数またはStreamlit Secretsの確認
+        client_id, client_secret, refresh_token = get_google_credentials()
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            if client_id:
+                st.success("✅ CLIENT_ID")
+            else:
+                st.error("❌ CLIENT_ID")
+        
+        with col2:
+            if client_secret:
+                st.success("✅ CLIENT_SECRET")
+            else:
+                st.error("❌ CLIENT_SECRET")
+        
+        with col3:
+            if refresh_token:
+                st.success("✅ REFRESH_TOKEN")
+            else:
+                st.warning("⚠️ REFRESH_TOKEN")
+        
+        # 認証実行
+        if client_id and client_secret:
+            if st.button("🔄 認証を実行", key="execute_google_auth"):
+                with st.spinner("認証中..."):
+                    if self.authenticate():
+                        st.success("✅ 認証が完了しました")
+                        st.rerun()
+                    else:
+                        st.error("❌ 認証に失敗しました")
+        else:
+            st.warning("⚠️ 環境変数を設定してください")
+            if st.button("🔧 設定スクリプトを実行", key="run_setup_script"):
+                st.info("ターミナルで `python setup_google_auth.py` を実行してください")
+    
+    def get_calendars(self) -> List[Dict[str, Any]]:
         """利用可能なカレンダーリストを取得"""
         if not self.service:
             if not self.authenticate():
@@ -869,11 +1099,14 @@ class GoogleCalendarManager:
         try:
             calendar_list = self.service.calendarList().list().execute()
             return calendar_list.get('items', [])
-        except Exception as e:
+        except HttpError as e:
             st.error(f"カレンダーリストの取得に失敗しました: {e}")
             return []
+        except Exception as e:
+            st.error(f"予期しないエラー: {e}")
+            return []
     
-    def get_events(self, calendar_id='primary', max_results=10):
+    def get_events(self, calendar_id: str = 'primary', max_results: int = 10) -> List[Dict[str, Any]]:
         """指定したカレンダーからイベントを取得"""
         if not self.service:
             if not self.authenticate():
@@ -890,11 +1123,14 @@ class GoogleCalendarManager:
             ).execute()
             
             return events_result.get('items', [])
-        except Exception as e:
+        except HttpError as e:
             st.error(f"イベントの取得に失敗しました: {e}")
             return []
+        except Exception as e:
+            st.error(f"予期しないエラー: {e}")
+            return []
     
-    def create_event(self, event_data, calendar_id='primary'):
+    def create_event(self, event_data: Dict[str, Any], calendar_id: str = 'primary') -> Optional[Dict[str, Any]]:
         """新しいイベントを作成"""
         if not self.service:
             if not self.authenticate():
@@ -919,15 +1155,19 @@ class GoogleCalendarManager:
                 event['end'] = {'date': event_data['end_date'][:10]}
             
             created_event = self.service.events().insert(
-                calendarId=calendar_id, body=event
-            ).execute()
+                calendarId=calendar_id, body=event).execute()
             
+            st.success(f"イベント「{event_data['title']}」を作成しました")
             return created_event
-        except Exception as e:
+            
+        except HttpError as e:
             st.error(f"イベントの作成に失敗しました: {e}")
             return None
+        except Exception as e:
+            st.error(f"予期しないエラー: {e}")
+            return None
     
-    def update_event(self, event_id, event_data, calendar_id='primary'):
+    def update_event(self, event_id: str, event_data: Dict[str, Any], calendar_id: str = 'primary') -> Optional[Dict[str, Any]]:
         """イベントを更新"""
         if not self.service:
             if not self.authenticate():
@@ -956,11 +1196,14 @@ class GoogleCalendarManager:
             ).execute()
             
             return updated_event
-        except Exception as e:
+        except HttpError as e:
             st.error(f"イベントの更新に失敗しました: {e}")
             return None
+        except Exception as e:
+            st.error(f"予期しないエラー: {e}")
+            return None
     
-    def delete_event(self, event_id, calendar_id='primary'):
+    def delete_event(self, event_id: str, calendar_id: str = 'primary') -> bool:
         """イベントを削除"""
         if not self.service:
             if not self.authenticate():
@@ -971,11 +1214,14 @@ class GoogleCalendarManager:
                 calendarId=calendar_id, eventId=event_id
             ).execute()
             return True
-        except Exception as e:
+        except HttpError as e:
             st.error(f"イベントの削除に失敗しました: {e}")
             return False
+        except Exception as e:
+            st.error(f"予期しないエラー: {e}")
+            return False
     
-    def sync_local_to_google(self, local_events, calendar_id='primary'):
+    def sync_local_to_google(self, local_events: List[Dict[str, Any]], calendar_id: str = 'primary') -> bool:
         """ローカルイベントをGoogleカレンダーに同期"""
         if not self.service:
             if not self.authenticate():
@@ -996,7 +1242,7 @@ class GoogleCalendarManager:
             st.error(f"同期に失敗しました: {e}")
             return False
     
-    def sync_google_to_local(self, calendar_id='primary'):
+    def sync_google_to_local(self, calendar_id: str = 'primary') -> List[Dict[str, Any]]:
         """Googleカレンダーからローカルに同期"""
         if not self.service:
             if not self.authenticate():
@@ -1024,7 +1270,8 @@ class GoogleCalendarManager:
             st.error(f"Googleカレンダーからの同期に失敗しました: {e}")
             return []
 
-def save_audio_file(audio_data, filename):
+
+def save_audio_file(audio_data: bytes, filename: str) -> bool:
     """音声ファイルを保存"""
     try:
         os.makedirs("recordings", exist_ok=True)
@@ -1036,7 +1283,8 @@ def save_audio_file(audio_data, filename):
         st.error(f"ファイル保存エラー: {e}")
         return False
 
-def save_transcription_file(transcription_text, filename):
+
+def save_transcription_file(transcription_text: str, filename: str) -> bool:
     """文字起こしファイルを保存"""
     try:
         os.makedirs("transcriptions", exist_ok=True)
@@ -1046,4 +1294,4 @@ def save_transcription_file(transcription_text, filename):
         return True
     except Exception as e:
         st.error(f"文字起こし保存エラー: {e}")
-        return False 
+        return False

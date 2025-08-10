@@ -3,17 +3,21 @@ Streamlit Cloud対応音声録音・文字起こしアプリ（拡張版）
 streamlit-audiorec + OpenAI Whisper API + 豊富な設定機能
 """
 
-import streamlit as st
-import numpy as np
-import wave
-import io
+# 標準ライブラリ
 import base64
+import io
+import json
 import os
 import tempfile
+import wave
 from datetime import datetime, date
-from dotenv import load_dotenv
-import json
+from typing import Optional, List, Dict, Any
+
+# サードパーティライブラリ
+import numpy as np
 import openai
+import streamlit as st
+from dotenv import load_dotenv
 from st_audiorec import st_audiorec
 
 # 拡張機能のインポート
@@ -38,6 +42,7 @@ from settings_ui_audiorec import (
     render_calendar_management_tab,
     render_google_calendar_tab
 )
+from config_manager import get_secret, show_environment_info
 
 # 環境変数を読み込み
 load_dotenv()
@@ -53,23 +58,27 @@ st.set_page_config(
 class AudioTranscriptionManager:
     """音声文字起こし管理クラス"""
     
-    def __init__(self):
-        self.openai_client = None
-        self.task_analyzer = None
-        self.event_analyzer = None
+    def __init__(self) -> None:
+        self.openai_client: Optional[openai.OpenAI] = None
+        self.task_analyzer: Optional[TaskAnalyzer] = None
+        self.event_analyzer: Optional[EventAnalyzer] = None
         self.setup_openai()
     
-    def setup_openai(self):
+    def setup_openai(self) -> None:
         """OpenAI APIの設定"""
-        api_key = os.getenv("OPENAI_API_KEY")
+        api_key = get_secret("OPENAI_API_KEY")
         if api_key:
-            self.openai_client = openai.OpenAI(api_key=api_key)
-            self.task_analyzer = TaskAnalyzer(self.openai_client)
-            self.event_analyzer = EventAnalyzer(self.openai_client)
+            try:
+                self.openai_client = openai.OpenAI(api_key=api_key)
+                self.task_analyzer = TaskAnalyzer(self.openai_client)
+                self.event_analyzer = EventAnalyzer(self.openai_client)
+            except Exception as e:
+                st.error(f"OpenAI API初期化エラー: {e}")
+                self.openai_client = None
         else:
             st.warning("⚠️ OpenAI APIキーが設定されていません。文字起こし機能は利用できません。")
     
-    def transcribe_audio(self, audio_data, filename="recording.wav"):
+    def transcribe_audio(self, audio_data: bytes, filename: str = "recording.wav") -> tuple[Optional[str], Optional[str]]:
         """音声ファイルを文字起こし"""
         if not self.openai_client:
             return None, "OpenAI APIキーが設定されていません"
@@ -96,36 +105,42 @@ class AudioTranscriptionManager:
         except Exception as e:
             return None, f"文字起こしエラー: {str(e)}"
     
-    def analyze_transcription_for_tasks_and_events(self, transcription_text):
+    def analyze_transcription_for_tasks_and_events(self, transcription_text: str) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[str]]:
         """文字起こし結果からタスクとイベントを分析"""
         if not transcription_text:
-            return [], [], "文字起こし結果がありません"
+            return [], [], ["文字起こし結果がありません"]
         
-        tasks = []
-        events = []
-        errors = []
+        tasks: List[Dict[str, Any]] = []
+        events: List[Dict[str, Any]] = []
+        errors: List[str] = []
         
         # タスク分析
         if self.task_analyzer:
-            detected_tasks, task_error = self.task_analyzer.analyze_text_for_tasks(transcription_text)
-            if detected_tasks:
-                tasks = detected_tasks
-            if task_error:
-                errors.append(task_error)
+            try:
+                detected_tasks, task_error = self.task_analyzer.analyze_text_for_tasks(transcription_text)
+                if detected_tasks:
+                    tasks = detected_tasks
+                if task_error:
+                    errors.append(task_error)
+            except Exception as e:
+                errors.append(f"タスク分析エラー: {str(e)}")
         
         # イベント分析
         if self.event_analyzer:
-            detected_events, event_error = self.event_analyzer.analyze_text_for_events(transcription_text)
-            if detected_events:
-                events = detected_events
-            if event_error:
-                errors.append(event_error)
+            try:
+                detected_events, event_error = self.event_analyzer.analyze_text_for_events(transcription_text)
+                if detected_events:
+                    events = detected_events
+                if event_error:
+                    errors.append(event_error)
+            except Exception as e:
+                errors.append(f"イベント分析エラー: {str(e)}")
         
         return tasks, events, errors
 
 # 設定管理クラスは utils_audiorec.py に移動済み
 
-def main():
+def main() -> None:
     """メイン関数"""
     st.set_page_config(
         page_title="音声録音・文字起こしアプリ",
@@ -381,6 +396,9 @@ def main():
         **Googleカレンダー:**
         - `Ctrl+Shift+G`: Googleカレンダータブを開く
         """)
+    
+    # 環境情報の表示（サイドバー）
+    show_environment_info()
     
     # フッター
     st.markdown("---")

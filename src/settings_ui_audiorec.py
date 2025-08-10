@@ -3,17 +3,23 @@ app_audiorec.py用の拡張設定UIコンポーネント
 設定、ユーザー辞書、コマンド、デバイス管理などのUIを提供
 """
 
-import streamlit as st
+# 標準ライブラリ
 import json
 import os
 from datetime import datetime, date
+from typing import Dict, Any
+
+# サードパーティライブラリ
+import streamlit as st
+
+# ローカルインポート
 from utils_audiorec import (
     EnhancedSettingsManager, CommandManager, UserDictionaryManager,
     TaskManager, CalendarManager, TaskAnalyzer, EventAnalyzer,
     GoogleCalendarManager, DeviceManager
 )
 
-def render_enhanced_settings_tab(settings_manager):
+def render_enhanced_settings_tab(settings_manager: EnhancedSettingsManager) -> Dict[str, Any]:
     """拡張設定タブの表示"""
     st.subheader("⚙️ 拡張設定")
     
@@ -45,7 +51,7 @@ def render_enhanced_settings_tab(settings_manager):
     
     return settings
 
-def render_audio_settings_tab(settings, settings_manager):
+def render_audio_settings_tab(settings: Dict[str, Any], settings_manager: EnhancedSettingsManager) -> None:
     """音声設定タブ"""
     st.write("**🎵 音声設定**")
     
@@ -236,7 +242,7 @@ def render_shortcut_settings_tab(settings, settings_manager):
     
     settings["shortcuts"]["keys"] = new_keys
 
-def render_user_dictionary_tab():
+def render_user_dictionary_tab() -> None:
     """ユーザー辞書タブ"""
     st.subheader("📚 ユーザー辞書")
     
@@ -303,7 +309,7 @@ def render_user_dictionary_tab():
             else:
                 st.info("このカテゴリにはエントリがありません")
 
-def render_commands_tab():
+def render_commands_tab() -> None:
     """コマンドタブ"""
     st.subheader("⚡ コマンド管理")
     
@@ -664,7 +670,7 @@ def render_calendar_management_tab():
         else:
             st.info("イベントがありません") 
 
-def render_google_calendar_tab():
+def render_google_calendar_tab() -> None:
     """Googleカレンダー連携タブをレンダリング"""
     st.header("📅 Googleカレンダー連携")
     
@@ -680,31 +686,28 @@ def render_google_calendar_tab():
     ])
     
     with tab1:
-        st.subheader("Google認証設定")
+        # 改善された認証設定画面
+        google_calendar.setup_web_authentication()
         
-        # 認証ファイルの確認
-        if os.path.exists('credentials.json'):
-            st.success("✅ credentials.jsonファイルが見つかりました")
-            
-            # 認証ボタン
-            if st.button("🔐 Google認証を実行"):
-                with st.spinner("Google認証を実行中..."):
-                    if google_calendar.authenticate():
-                        st.success("✅ Google認証が完了しました")
-                    else:
-                        st.error("❌ Google認証に失敗しました")
+        # 認証状態の表示
+        st.subheader("🔍 認証状態")
+        auth_status = google_calendar.get_authentication_status()
+        
+        if auth_status == "認証済み":
+            st.success(f"✅ {auth_status}")
+        elif auth_status == "認証期限切れ":
+            st.warning(f"⚠️ {auth_status}")
         else:
-            st.error("❌ credentials.jsonファイルが見つかりません")
-            st.info("""
-            **Google認証ファイルの設定手順:**
-            
-            1. [Google Cloud Console](https://console.cloud.google.com/)にアクセス
-            2. 新しいプロジェクトを作成
-            3. Google Calendar APIを有効化
-            4. 認証情報を作成（OAuth 2.0クライアントID）
-            5. credentials.jsonファイルをダウンロード
-            6. このファイルをプロジェクトのルートディレクトリに配置
-            """)
+            st.error(f"❌ {auth_status}")
+        
+        # 手動認証ボタン
+        if st.button("🔄 手動で認証を実行"):
+            with st.spinner("Google認証を実行中..."):
+                if google_calendar.authenticate():
+                    st.success("✅ Google認証が完了しました")
+                    st.rerun()
+                else:
+                    st.error("❌ Google認証に失敗しました")
     
     with tab2:
         st.subheader("利用可能なカレンダー")

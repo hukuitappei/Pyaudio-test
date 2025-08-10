@@ -1,0 +1,103 @@
+---
+description: Next.js開発のための詳細なルールとベストプラクティス
+globs:
+  - "**/*.tsx"
+  - "**/*.ts"
+  - "**/app/**"
+  - "**/components/**"
+  - "**/lib/**"
+  - "**/pages/**"
+alwaysApply: true
+---
+
+# Next.js開発ルール
+
+## プロジェクト構成
+- App Routerを使用（pages routerは使用しない）
+- コンポーネントは`components/`ディレクトリに配置
+- ユーティリティ関数は`lib/`ディレクトリに配置
+- 型定義は`lib/types.ts`にまとめる
+
+## コンポーネント設計
+- 関数コンポーネントを使用（クラスコンポーネントは使用しない）
+- デフォルトエクスポートを使用
+- プロップスの型定義を必須とする
+- コンポーネント名はPascalCaseで記述
+
+## TypeScript設定
+- 厳密モードを有効にする（strict: true）
+- 未使用変数のチェックを有効にする
+- 型推論を活用し、明示的な型注釈は必要な場合のみ
+- anyの使用は禁止（unknownを使用）
+
+## パフォーマンス最適化
+- 動的インポートを活用
+- Image コンポーネントを使用（img タグは使用しない）
+- メタデータAPIを使用してSEOを最適化
+- React.memoを適切に使用
+
+## スタイリング
+- Tailwind CSSを使用
+- CSS-in-JSは使用しない
+- カスタムCSSは最小限に抑制
+- レスポンシブデザインを必須とする
+
+## 状態管理
+- 軽量な状態はuseStateを使用
+- 複雑な状態はuseReducerを使用
+- グローバル状態が必要な場合はZustandを使用
+- Reduxは使用しない
+
+## データフェッチング
+- Server Componentsを優先使用
+- Client Componentsは必要な場合のみ
+- SWRまたはTanStack Queryを使用
+- fetch APIを直接使用する場合はエラーハンドリングを必須とする
+
+## ルーティング
+- App Routerの規約に従う
+- 動的ルートは適切な命名規則を使用
+- ネストしたレイアウトを活用
+- Loading UIとError UIを必ず実装
+
+## セキュリティ
+- 環境変数は.env.localを使用
+- クライアントサイドで機密情報を露出しない
+- CSRFトークンを適切に処理
+- XSS対策を実装
+
+## エラーハンドリング
+- Error Boundaryを実装
+- 適切なfallback UIを提供
+- エラーログを記録
+- ユーザーフレンドリーなエラーメッセージを表示
+
+## テスト
+- Jest + React Testing Libraryを使用
+- コンポーネントテストを必須とする
+- E2EテストはPlaywrightを使用
+- テストカバレッジ80%以上を目標
+
+## アクセシビリティ
+- セマンティックHTMLを使用
+- ARIAラベルを適切に設定
+- キーボードナビゲーションを実装
+- カラーコントラストを確保
+
+## ビルドと最適化
+- バンドルアナライザーで定期的にチェック
+- 不要な依存関係を削除
+- Tree shakingを活用
+- 静的アセットを最適化
+
+## 開発環境
+- ESLintとPrettierを設定
+- Huskyでpre-commitフックを設定
+- TypeScriptの型チェックを自動化
+- ホットリロードを活用
+
+## ファイル命名規則
+- コンポーネント: PascalCase.tsx
+- ユーティリティ: camelCase.ts
+- 定数: UPPER_SNAKE_CASE
+- ディレクトリ: kebab-case

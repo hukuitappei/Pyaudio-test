@@ -1,23 +1,16 @@
-# API Keys for LLM Services
-# Copy this file to .env and fill in your actual API keys
+# Google認証用環境変数設定例
+# 本番環境では環境変数を使用することを推奨します
 
-# OpenAI API Key
+# Google Cloud Consoleで取得した認証情報
+GOOGLE_CLIENT_ID=your_client_id_here
+GOOGLE_CLIENT_SECRET=your_client_secret_here
+
+# 初回認証後に取得されるリフレッシュトークン
+GOOGLE_REFRESH_TOKEN=your_refresh_token_here
+
+# OpenAI API設定
 OPENAI_API_KEY=your_openai_api_key_here
 
-# Anthropic API Key (optional)
-ANTHROPIC_API_KEY=your_anthropic_api_key_here
-
-# Google API Key (optional)
-GOOGLE_API_KEY=your_google_api_key_here
-
-# Google OAuth2 Credentials (for Google Calendar integration)
-# Download credentials.json from Google Cloud Console
-# GOOGLE_CREDENTIALS_FILE=credentials.json
-
-# Google Calendar Settings
-GOOGLE_CALENDAR_ID=primary
-GOOGLE_TIMEZONE=Asia/Tokyo
-
-# Other configuration
-# STREAMLIT_SERVER_PORT=8501
-# STREAMLIT_SERVER_ADDRESS=localhost 
+# その他の設定
+STREAMLIT_SERVER_PORT=8502
+STREAMLIT_SERVER_ADDRESS=localhost 
