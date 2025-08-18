@@ -865,8 +865,8 @@ class GoogleCalendarManager:
                     self.service = build('calendar', 'v3', credentials=self.credentials)
                     return True
             
-                    # 環境変数またはStreamlit Secretsから認証情報を取得
-        client_id, client_secret, _ = get_google_credentials()
+            # 環境変数またはStreamlit Secretsから認証情報を取得
+            client_id, client_secret, _ = get_google_credentials()
             
             if client_id and client_secret:
                 creds = self._create_credentials_from_env(client_id, client_secret)

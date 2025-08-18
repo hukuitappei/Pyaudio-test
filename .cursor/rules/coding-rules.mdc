@@ -27,6 +27,10 @@ alwaysApply: true
 - **TypeScript**: `@typescript-rules.mdc` - TypeScript開発規約
 - **Python**: `@python-rules.mdc` - Python開発規約（既存）
 
+### 品質管理
+- **エラー予防**: `@error-prevention.mdc` - エラー予防とコード品質向上ルール
+- **Streamlit デプロイ**: `@streamlit-deployment.mdc` - Streamlit Cloud デプロイメントルール
+
 ## 全体共通ルール
 
 ### セキュリティ

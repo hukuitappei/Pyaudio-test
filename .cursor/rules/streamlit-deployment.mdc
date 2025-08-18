@@ -1,0 +1,308 @@
+---
+description: Streamlit Cloud デプロイメントのためのルールとベストプラクティス
+globs:
+  - "**/streamlit_app.py"
+  - "**/app*.py"
+  - "**/.streamlit/**"
+  - "**/requirements.txt"
+alwaysApply: true
+---
+
+# Streamlit Cloud デプロイメントルール
+
+ファイル名: streamlit-deployment.mdc
+最終更新日時: 2025年1月現在
+
+## 基本方針
+Streamlit Cloudでの安定したデプロイメントを実現するためのルールを定義します。
+ローカル開発環境との差異を考慮し、クラウド環境特有の制約に対応します。
+
+## ファイル構造要件
+
+### メインファイル配置
+- **ルートディレクトリ配置必須**:
+  - `streamlit_app.py` または `app.py` をルートに配置
+  - Streamlit Cloudは `/mount/src/project/` 直下を探索
+  - サブディレクトリのメインファイルは認識されない
+
+- **依存ファイルの配置**:
+  - メインファイルから直接インポートされるファイルはルートに配置
+  - 相対インポートパスを使用（`from module import ...`）
+  - `src/` ディレクトリは開発用として維持可能
+
+### 推奨ディレクトリ構造
+```
+プロジェクトルート/
+├── streamlit_app.py          # Streamlit Cloud メインファイル
+├── utils.py                  # 直接インポートされる依存ファイル
+├── config_manager.py         # 設定管理
+├── requirements.txt          # 依存関係定義
+├── .streamlit/
+│   ├── config.toml           # Streamlit設定
+│   └── secrets.toml          # ローカル用（.gitignoreで除外）
+├── src/                      # 開発用ソースコード
+│   ├── streamlit_app.py      # 開発版
+│   └── utils.py              # 開発版
+└── docs/                     # ドキュメント
+```
+
+## インポート管理
+
+### インポートパス
+- **絶対インポート禁止**:
+  ```python
+  # ❌ 悪い例
+  from src.utils import function
+  from .utils import function
+  
+  # ✅ 良い例
+  from utils import function
+  ```
+
+- **sys.path操作の回避**:
+  ```python
+  # ❌ 悪い例（Streamlit Cloudで問題となる可能性）
+  import sys
+  sys.path.append('src')
+  
+  # ✅ 良い例（ファイル配置で解決）
+  # ルートディレクトリに必要ファイルを配置
+  ```
+
+### インポート順序（PEP8準拠）
+```python
+# 標準ライブラリ
+import os
+import json
+from datetime import datetime
+
+# サードパーティライブラリ
+import streamlit as st
+import openai
+import numpy as np
+
+# ローカルモジュール
+from utils import MyClass
+from config_manager import get_secret
+```
+
+## 設定管理
+
+### 環境変数とSecrets
+- **統一的な設定取得**:
+  ```python
+  def get_secret(key: str, default=None):
+      # 1. 環境変数を優先
+      value = os.getenv(key)
+      if value:
+          return value
+      
+      # 2. Streamlit Secretsを確認
+      try:
+          if hasattr(st, 'secrets') and key in st.secrets:
+              return st.secrets[key]
+      except Exception:
+          pass
+      
+      # 3. デフォルト値
+      return default
+  ```
+
+- **Secrets形式の統一**:
+  ```toml
+  # .streamlit/secrets.toml（ローカル用）
+  OPENAI_API_KEY = "sk-..."
+  GOOGLE_CLIENT_ID = "..."
+  GOOGLE_CLIENT_SECRET = "..."
+  ```
+
+### 設定ファイル要件
+- **config.toml設定**:
+  ```toml
+  [server]
+  headless = true
+  enableCORS = false
+  enableXsrfProtection = false
+  
+  [browser]
+  gatherUsageStats = false
+  
+  [theme]
+  primaryColor = "#1f77b4"
+  backgroundColor = "#ffffff"
+  secondaryBackgroundColor = "#f0f2f6"
+  textColor = "#262730"
+  ```
+
+## エラー予防
+
+### シンタックスエラー対策
+- **インデント管理**:
+  - 4スペース統一（タブ使用禁止）
+  - try-except文のインデントレベル厳守
+  - コードエディタの可視化設定有効化
+
+- **構文チェック**:
+  ```bash
+  # デプロイ前チェック
+  python -m py_compile streamlit_app.py
+  python -m py_compile utils.py
+  python -m py_compile config_manager.py
+  ```
+
+### インポートエラー対策
+- **依存関係の確認**:
+  ```python
+  # モジュール存在チェック
+  try:
+      from utils import required_function
+  except ImportError as e:
+      st.error(f"必要なモジュールが見つかりません: {e}")
+      st.stop()
+  ```
+
+- **requirements.txt管理**:
+  ```txt
+  streamlit>=1.28.0
+  openai>=1.0.0
+  python-dotenv>=1.0.0
+  # バージョン固定で安定性確保
+  ```
+
+## パフォーマンス最適化
+
+### キャッシュ戦略
+- **st.cache_data使用**:
+  ```python
+  @st.cache_data
+  def load_data():
+      # 重い処理のキャッシュ
+      return expensive_operation()
+  ```
+
+- **セッション状態管理**:
+  ```python
+  # 認証情報等の永続化
+  if 'auth_token' not in st.session_state:
+      st.session_state.auth_token = None
+  ```
+
+### リソース管理
+- **メモリ使用量の監視**:
+  - 大きなデータの適切な解放
+  - 不要なオブジェクトの削除
+  - ガベージコレクションの考慮
+
+## セキュリティ
+
+### 機密情報管理
+- **ハードコーディング禁止**:
+  ```python
+  # ❌ 絶対禁止
+  api_key = "sk-proj-actual-key-here"
+  
+  # ✅ 正しい方法
+  api_key = get_secret("OPENAI_API_KEY")
+  if not api_key:
+      st.error("APIキーが設定されていません")
+      st.stop()
+  ```
+
+- **.gitignore設定**:
+  ```gitignore
+  .streamlit/secrets.toml
+  .env
+  *.key
+  credentials.json
+  token.pickle
+  ```
+
+## デプロイメント手順
+
+### 事前チェック
+1. **ファイル配置確認**:
+   - メインファイルがルートディレクトリにある
+   - 依存ファイルが適切に配置されている
+   - インポートパスが正しい
+
+2. **構文チェック**:
+   ```bash
+   python -m py_compile *.py
+   ```
+
+3. **依存関係確認**:
+   ```bash
+   pip install -r requirements.txt
+   streamlit run streamlit_app.py
+   ```
+
+### デプロイ設定
+1. **Streamlit Cloud設定**:
+   - Main file path: `streamlit_app.py`
+   - Python version: 3.8+
+   - Advanced settings: 必要に応じて設定
+
+2. **Secrets設定**:
+   - ローカルの`.streamlit/secrets.toml`内容をコピー
+   - Streamlit Cloud Secretsに貼り付け
+
+### デプロイ後確認
+1. **動作確認**:
+   - アプリケーション起動確認
+   - 主要機能の動作テスト
+   - エラーログの確認
+
+2. **パフォーマンス確認**:
+   - 初回読み込み時間
+   - レスポンス時間
+   - メモリ使用量
+
+## トラブルシューティング
+
+### よくあるエラーと対処法
+
+#### "Main module does not exist"
+- **原因**: メインファイルがルートディレクトリにない
+- **対処**: `streamlit_app.py`をルートディレクトリに配置
+
+#### "ModuleNotFoundError"
+- **原因**: インポートパスが間違っている
+- **対処**: 依存ファイルをルートディレクトリに配置し、インポートパスを修正
+
+#### "SyntaxError"
+- **原因**: インデントエラーや構文ミス
+- **対処**: ローカルで`python -m py_compile`を実行してチェック
+
+#### "KeyError: 'API_KEY'"
+- **原因**: Streamlit Secretsが設定されていない
+- **対処**: Streamlit Cloud Secretsで環境変数を設定
+
+### デバッグ方法
+- **ログ出力**:
+  ```python
+  st.write(f"Debug: {variable_name}")
+  st.json({"debug_data": data})
+  ```
+
+- **環境情報確認**:
+  ```python
+  st.sidebar.write("Environment Info:")
+  st.sidebar.write(f"Python: {sys.version}")
+  st.sidebar.write(f"Streamlit: {st.__version__}")
+  ```
+
+## 継続的改善
+
+### 監視項目
+- デプロイ成功率
+- エラー発生率
+- パフォーマンス指標
+- ユーザーフィードバック
+
+### 定期メンテナンス
+- 依存関係の更新
+- セキュリティパッチの適用
+- パフォーマンス最適化
+- ドキュメントの更新
+
+この文書は Streamlit Cloud の仕様変更に合わせて継続的に更新します。
