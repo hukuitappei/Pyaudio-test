@@ -141,9 +141,17 @@ class AudioRecorderApp:
                 with open(tmp_file.name, "rb") as audio_file:
                     # 設定の取得（フォールバック対応）
                     if self.settings_manager:
-                        settings = self.settings_manager.load_settings()
-                        model = settings["transcription"]["model"]
-                        language = settings["transcription"]["language"]
+                        try:
+                            settings = self.settings_manager.load_settings()
+                            # transcription.modelまたはwhisper.model_sizeから取得
+                            model = settings.get('transcription', {}).get('model') or settings.get('whisper', {}).get('model_size', 'whisper-1')
+                            if model == 'base':  # whisperのmodel_sizeの場合はOpenAI APIモデル名に変換
+                                model = 'whisper-1'
+                            language = settings.get('transcription', {}).get('language') or settings.get('whisper', {}).get('language', 'ja')
+                        except Exception as e:
+                            print(f"設定読み込みエラー: {e}")
+                            model = "whisper-1"
+                            language = "ja"
                     else:
                         # デフォルト設定
                         model = "whisper-1"
@@ -276,11 +284,20 @@ class AudioRecorderApp:
             
             # 設定情報表示
             if self.settings_manager:
-                settings = self.settings_manager.load_settings()
-                st.subheader("⚙️ 現在の設定")
-                st.write(f"サンプリングレート: {settings['audio']['sample_rate']} Hz")
-                st.write(f"録音時間: {settings['audio']['duration']} 秒")
-                st.write(f"文字起こしモデル: {settings['transcription']['model']}")
+                try:
+                    settings = self.settings_manager.load_settings()
+                    st.subheader("⚙️ 現在の設定")
+                    st.write(f"サンプリングレート: {settings.get('audio', {}).get('sample_rate', 44100)} Hz")
+                    st.write(f"録音時間: {settings.get('audio', {}).get('duration', 5)} 秒")
+                    # transcription.modelの代わりにwhisper.model_sizeを使用
+                    model = settings.get('transcription', {}).get('model') or settings.get('whisper', {}).get('model_size', 'whisper-1')
+                    st.write(f"文字起こしモデル: {model}")
+                except Exception as e:
+                    st.subheader("⚙️ デフォルト設定（設定読み込みエラー）")
+                    st.write("サンプリングレート: 44100 Hz")
+                    st.write("録音時間: 5 秒")
+                    st.write("文字起こしモデル: whisper-1")
+                    print(f"設定読み込みエラー: {e}")
             else:
                 st.subheader("⚙️ デフォルト設定")
                 st.write("サンプリングレート: 44100 Hz")
