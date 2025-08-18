@@ -809,38 +809,31 @@ class SettingsUI:
     
     def display_settings_page(self):
         """設定ページ表示"""
-        st.title("⚙️ 設定")
         render_enhanced_settings_tab(self.settings_manager)
     
     def display_user_dictionary_page(self):
         """ユーザー辞書ページ表示"""
-        st.title("📚 ユーザー辞書")
-        render_user_dictionary_tab(self.user_dict_manager)
+        render_user_dictionary_tab()
     
     def display_command_management_page(self):
         """コマンド管理ページ表示"""
-        st.title("🔧 コマンド管理")
-        render_command_management_tab(self.command_manager)
+        render_commands_tab()
     
     def display_device_management_page(self):
         """デバイス管理ページ表示"""
-        st.title("🎤 デバイス管理")
         settings = self.settings_manager.load_settings()
         render_device_settings_tab(settings, self.settings_manager)
     
     def display_task_management_page(self):
         """タスク管理ページ表示"""
-        st.title("📋 タスク管理")
-        render_task_management_tab(self.task_manager)
+        render_task_management_tab()
     
     def display_calendar_page(self):
         """カレンダーページ表示"""
-        st.title("📅 カレンダー")
-        render_calendar_tab(self.calendar_manager, self.google_calendar)
+        render_calendar_management_tab()
     
     def display_history_page(self):
         """履歴ページ表示"""
-        st.title("📜 履歴")
         st.write("文字起こし履歴機能は開発中です。")
         
         # 履歴ファイル一覧
@@ -865,7 +858,6 @@ class SettingsUI:
     
     def display_statistics_page(self):
         """統計ページ表示"""
-        st.title("📊 統計")
         st.write("統計機能は開発中です。")
         
         # 基本的な統計情報

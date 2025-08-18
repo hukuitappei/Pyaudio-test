@@ -275,12 +275,21 @@ class AudioRecorderApp:
         with st.sidebar:
             st.title("🎙️ 音声録音アプリ")
             
-            # ページ選択
+            # ページ選択（シンプル化）
             page = st.selectbox(
-                "ページを選択",
-                ["メイン", "設定", "履歴", "統計", "デバイス管理", "ユーザー辞書", "コマンド管理", "タスク管理", "カレンダー"]
+                "表示モード",
+                ["メイン（タブ形式）", "クラシック表示"]
             )
-            st.session_state.current_page = page
+            
+            # メインページはタブ形式、他は従来通り
+            if page == "メイン（タブ形式）":
+                st.session_state.current_page = "メイン"
+            else:
+                classic_page = st.selectbox(
+                    "クラシック表示ページ",
+                    ["設定", "履歴", "統計", "デバイス管理", "ユーザー辞書", "コマンド管理", "タスク管理", "カレンダー"]
+                )
+                st.session_state.current_page = classic_page
             
             # 設定情報表示
             if self.settings_manager:
@@ -312,10 +321,86 @@ class AudioRecorderApp:
                     st.write(f"デバイス: {device_info.get('name', 'Unknown')}")
     
     def main_page(self):
-        """メインページ"""
+        """メインページ（タブ形式）"""
         st.title("🎙️ 音声録音・文字起こしアプリ")
         st.write("音声を録音して、OpenAI Whisper APIで文字起こしを行います。")
+        st.info("💡 各機能はタブから簡単にアクセスできます。")
         
+        # タブの作成
+        tabs = st.tabs([
+            "🎤 録音・文字起こし",
+            "⚙️ 設定", 
+            "📚 ユーザー辞書",
+            "🔧 コマンド管理",
+            "🎙️ デバイス管理",
+            "📋 タスク管理",
+            "📅 カレンダー",
+            "📜 履歴",
+            "📊 統計"
+        ])
+        
+        # 録音・文字起こしタブ
+        with tabs[0]:
+            self.display_recording_tab()
+        
+        # 設定タブ
+        with tabs[1]:
+            if self.settings_ui:
+                self.settings_ui.display_settings_page()
+            else:
+                st.error("設定UIが利用できません。")
+        
+        # ユーザー辞書タブ
+        with tabs[2]:
+            if self.settings_ui:
+                self.settings_ui.display_user_dictionary_page()
+            else:
+                st.error("ユーザー辞書UIが利用できません。")
+        
+        # コマンド管理タブ
+        with tabs[3]:
+            if self.settings_ui:
+                self.settings_ui.display_command_management_page()
+            else:
+                st.error("コマンド管理UIが利用できません。")
+        
+        # デバイス管理タブ
+        with tabs[4]:
+            if self.settings_ui:
+                self.settings_ui.display_device_management_page()
+            else:
+                st.error("デバイス管理UIが利用できません。")
+        
+        # タスク管理タブ
+        with tabs[5]:
+            if self.settings_ui:
+                self.settings_ui.display_task_management_page()
+            else:
+                st.error("タスク管理UIが利用できません。")
+        
+        # カレンダータブ
+        with tabs[6]:
+            if self.settings_ui:
+                self.settings_ui.display_calendar_page()
+            else:
+                st.error("カレンダーUIが利用できません。")
+        
+        # 履歴タブ
+        with tabs[7]:
+            if self.settings_ui:
+                self.settings_ui.display_history_page()
+            else:
+                st.error("履歴UIが利用できません。")
+        
+        # 統計タブ
+        with tabs[8]:
+            if self.settings_ui:
+                self.settings_ui.display_statistics_page()
+            else:
+                st.error("統計UIが利用できません。")
+    
+    def display_recording_tab(self):
+        """録音・文字起こしタブの表示"""
         # OpenAI クライアント設定
         client = self.setup_openai()
         if not client:
@@ -332,19 +417,24 @@ class AudioRecorderApp:
             # 音声プレイヤー
             self.display_audio_player(audio_data)
             
-            # 音声保存
-            if st.button("💾 音声ファイルを保存"):
-                filepath = self.save_audio_file(audio_data, timestamp)
-                if filepath:
-                    st.success(f"音声ファイルを保存しました: {filepath}")
+            # ボタン列
+            col1, col2 = st.columns(2)
             
-            # 文字起こし実行
-            if st.button("🔄 文字起こし実行", type="primary"):
-                with st.spinner("文字起こし中..."):
-                    transcription = self.transcribe_audio(audio_data, client)
-                    if transcription:
-                        st.session_state.transcription = transcription
-                        st.success("文字起こしが完了しました！")
+            with col1:
+                # 音声保存
+                if st.button("💾 音声ファイルを保存", key="save_audio_main"):
+                    filepath = self.save_audio_file(audio_data, timestamp)
+                    if filepath:
+                        st.success(f"音声ファイルを保存しました: {filepath}")
+            
+            with col2:
+                # 文字起こし実行
+                if st.button("🔄 文字起こし実行", type="primary", key="transcribe_main"):
+                    with st.spinner("文字起こし中..."):
+                        transcription = self.transcribe_audio(audio_data, client)
+                        if transcription:
+                            st.session_state.transcription = transcription
+                            st.success("文字起こしが完了しました！")
         
         # 文字起こし結果表示
         if st.session_state.transcription:
