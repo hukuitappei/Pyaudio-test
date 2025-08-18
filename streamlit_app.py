@@ -21,19 +21,36 @@ from dotenv import load_dotenv
 from st_audiorec import st_audiorec
 
 # 拡張機能のインポート
-from utils_audiorec import (
-    EnhancedSettingsManager, 
-    UserDictionaryManager, 
-    CommandManager, 
-    DeviceManager,
-    TaskManager,
-    CalendarManager,
-    TaskAnalyzer,
-    EventAnalyzer,
-    GoogleCalendarManager
-)
-from settings_ui_audiorec import SettingsUI
-from config_manager import get_secret, get_google_credentials
+try:
+    from utils_audiorec import (
+        EnhancedSettingsManager, 
+        UserDictionaryManager, 
+        CommandManager, 
+        DeviceManager,
+        TaskManager,
+        CalendarManager,
+        TaskAnalyzer,
+        EventAnalyzer,
+        GoogleCalendarManager
+    )
+    UTILS_AVAILABLE = True
+except ImportError as e:
+    print(f"utils_audiorec のインポートに失敗しました: {e}")
+    UTILS_AVAILABLE = False
+
+try:
+    from settings_ui_audiorec import SettingsUI
+    SETTINGS_UI_AVAILABLE = True
+except ImportError as e:
+    print(f"settings_ui_audiorec のインポートに失敗しました: {e}")
+    SETTINGS_UI_AVAILABLE = False
+
+try:
+    from config_manager import get_secret, get_google_credentials
+    CONFIG_AVAILABLE = True
+except ImportError as e:
+    print(f"config_manager のインポートに失敗しました: {e}")
+    CONFIG_AVAILABLE = False
 
 # 環境変数の読み込み
 load_dotenv()
@@ -43,16 +60,33 @@ class AudioRecorderApp:
     """音声録音・文字起こしアプリケーションクラス"""
     
     def __init__(self):
-        self.settings_manager = EnhancedSettingsManager()
-        self.user_dict_manager = UserDictionaryManager()
-        self.command_manager = CommandManager()
-        self.device_manager = DeviceManager()
-        self.task_manager = TaskManager()
-        self.calendar_manager = CalendarManager()
-        self.task_analyzer = TaskAnalyzer()
-        self.event_analyzer = EventAnalyzer()
-        self.google_calendar = GoogleCalendarManager()
-        self.settings_ui = SettingsUI()
+        # 拡張機能の初期化（インポート可能な場合のみ）
+        if UTILS_AVAILABLE:
+            self.settings_manager = EnhancedSettingsManager()
+            self.user_dict_manager = UserDictionaryManager()
+            self.command_manager = CommandManager()
+            self.device_manager = DeviceManager()
+            self.task_manager = TaskManager()
+            self.calendar_manager = CalendarManager()
+            self.task_analyzer = TaskAnalyzer()
+            self.event_analyzer = EventAnalyzer()
+            self.google_calendar = GoogleCalendarManager()
+        else:
+            # フォールバック: 基本機能のみ
+            self.settings_manager = None
+            self.user_dict_manager = None
+            self.command_manager = None
+            self.device_manager = None
+            self.task_manager = None
+            self.calendar_manager = None
+            self.task_analyzer = None
+            self.event_analyzer = None
+            self.google_calendar = None
+        
+        if SETTINGS_UI_AVAILABLE:
+            self.settings_ui = SettingsUI()
+        else:
+            self.settings_ui = None
         
         # セッション状態の初期化
         self._initialize_session_state()
@@ -72,9 +106,19 @@ class AudioRecorderApp:
     
     def setup_openai(self) -> Optional[openai.OpenAI]:
         """OpenAI APIの設定"""
-        api_key = get_secret("OPENAI_API_KEY")
+        if CONFIG_AVAILABLE:
+            api_key = get_secret("OPENAI_API_KEY")
+        else:
+            # フォールバック: 環境変数またはStreamlit Secretsから直接取得
+            api_key = os.getenv("OPENAI_API_KEY")
+            if not api_key:
+                try:
+                    api_key = st.secrets.get("OPENAI_API_KEY")
+                except:
+                    api_key = None
+        
         if not api_key:
-            st.error("OpenAI APIキーが設定されていません。設定画面で設定してください。")
+            st.error("OpenAI APIキーが設定されていません。環境変数またはStreamlit Secretsで設定してください。")
             return None
         
         try:
@@ -95,12 +139,20 @@ class AudioRecorderApp:
                 tmp_file.flush()
                 
                 with open(tmp_file.name, "rb") as audio_file:
-                    settings = self.settings_manager.load_settings()
+                    # 設定の取得（フォールバック対応）
+                    if self.settings_manager:
+                        settings = self.settings_manager.load_settings()
+                        model = settings["transcription"]["model"]
+                        language = settings["transcription"]["language"]
+                    else:
+                        # デフォルト設定
+                        model = "whisper-1"
+                        language = "ja"
                     
                     transcript = client.audio.transcriptions.create(
-                        model=settings["transcription"]["model"],
+                        model=model,
                         file=audio_file,
-                        language=settings["transcription"]["language"]
+                        language=language
                     )
                     
                 os.unlink(tmp_file.name)
@@ -142,15 +194,21 @@ class AudioRecorderApp:
     
     def process_commands(self, text: str) -> List[Dict[str, Any]]:
         """コマンド処理"""
-        return self.command_manager.process_text(text)
+        if self.command_manager:
+            return self.command_manager.process_text(text)
+        return []
     
     def analyze_tasks(self, text: str) -> List[Dict[str, Any]]:
         """タスク分析"""
-        return self.task_analyzer.analyze_text(text)
+        if self.task_analyzer:
+            return self.task_analyzer.analyze_text(text)
+        return []
     
     def analyze_events(self, text: str) -> List[Dict[str, Any]]:
         """イベント分析"""
-        return self.event_analyzer.analyze_text(text)
+        if self.event_analyzer:
+            return self.event_analyzer.analyze_text(text)
+        return []
     
     def display_audio_player(self, audio_data: bytes):
         """音声プレイヤー表示"""
@@ -217,14 +275,20 @@ class AudioRecorderApp:
             st.session_state.current_page = page
             
             # 設定情報表示
-            settings = self.settings_manager.load_settings()
-            st.subheader("⚙️ 現在の設定")
-            st.write(f"サンプリングレート: {settings['audio']['sample_rate']} Hz")
-            st.write(f"録音時間: {settings['audio']['duration']} 秒")
-            st.write(f"文字起こしモデル: {settings['transcription']['model']}")
+            if self.settings_manager:
+                settings = self.settings_manager.load_settings()
+                st.subheader("⚙️ 現在の設定")
+                st.write(f"サンプリングレート: {settings['audio']['sample_rate']} Hz")
+                st.write(f"録音時間: {settings['audio']['duration']} 秒")
+                st.write(f"文字起こしモデル: {settings['transcription']['model']}")
+            else:
+                st.subheader("⚙️ デフォルト設定")
+                st.write("サンプリングレート: 44100 Hz")
+                st.write("録音時間: 5 秒")
+                st.write("文字起こしモデル: whisper-1")
             
             # デバイス情報
-            if hasattr(self.device_manager, 'get_current_device_info'):
+            if self.device_manager and hasattr(self.device_manager, 'get_current_device_info'):
                 device_info = self.device_manager.get_current_device_info()
                 if device_info:
                     st.subheader("🎤 デバイス情報")
@@ -282,21 +346,45 @@ class AudioRecorderApp:
         if page == "メイン":
             self.main_page()
         elif page == "設定":
-            self.settings_ui.display_settings_page()
+            if self.settings_ui:
+                self.settings_ui.display_settings_page()
+            else:
+                st.error("設定UIが利用できません。settings_ui_audiorec.pyの読み込みに失敗しました。")
         elif page == "履歴":
-            self.settings_ui.display_history_page()
+            if self.settings_ui:
+                self.settings_ui.display_history_page()
+            else:
+                st.error("履歴UIが利用できません。settings_ui_audiorec.pyの読み込みに失敗しました。")
         elif page == "統計":
-            self.settings_ui.display_statistics_page()
+            if self.settings_ui:
+                self.settings_ui.display_statistics_page()
+            else:
+                st.error("統計UIが利用できません。settings_ui_audiorec.pyの読み込みに失敗しました。")
         elif page == "デバイス管理":
-            self.settings_ui.display_device_management_page()
+            if self.settings_ui:
+                self.settings_ui.display_device_management_page()
+            else:
+                st.error("デバイス管理UIが利用できません。settings_ui_audiorec.pyの読み込みに失敗しました。")
         elif page == "ユーザー辞書":
-            self.settings_ui.display_user_dictionary_page()
+            if self.settings_ui:
+                self.settings_ui.display_user_dictionary_page()
+            else:
+                st.error("ユーザー辞書UIが利用できません。settings_ui_audiorec.pyの読み込みに失敗しました。")
         elif page == "コマンド管理":
-            self.settings_ui.display_command_management_page()
+            if self.settings_ui:
+                self.settings_ui.display_command_management_page()
+            else:
+                st.error("コマンド管理UIが利用できません。settings_ui_audiorec.pyの読み込みに失敗しました。")
         elif page == "タスク管理":
-            self.settings_ui.display_task_management_page()
+            if self.settings_ui:
+                self.settings_ui.display_task_management_page()
+            else:
+                st.error("タスク管理UIが利用できません。settings_ui_audiorec.pyの読み込みに失敗しました。")
         elif page == "カレンダー":
-            self.settings_ui.display_calendar_page()
+            if self.settings_ui:
+                self.settings_ui.display_calendar_page()
+            else:
+                st.error("カレンダーUIが利用できません。settings_ui_audiorec.pyの読み込みに失敗しました。")
 
 
 def main():
