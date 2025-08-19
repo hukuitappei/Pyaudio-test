@@ -7,7 +7,8 @@ app_audiorec.py用の拡張設定UIコンポーネント
 import json
 import os
 from datetime import datetime, date
-from typing import Dict, Any
+from typing import Dict, Any, List, Optional
+import uuid
 
 # サードパーティライブラリ
 import streamlit as st
@@ -59,11 +60,20 @@ def render_audio_settings_tab(settings: Dict[str, Any], settings_manager: Enhanc
     
     with col1:
         st.write("**録音設定**")
+        
+        # 録音設定のキーを一意にする
+        if 'audio_sample_rate_key' not in st.session_state:
+            st.session_state.audio_sample_rate_key = str(uuid.uuid4())
+        if 'audio_gain_key' not in st.session_state:
+            st.session_state.audio_gain_key = str(uuid.uuid4())
+        if 'audio_duration_key' not in st.session_state:
+            st.session_state.audio_duration_key = str(uuid.uuid4())
+        
         sample_rate = st.selectbox("サンプルレート", [8000, 16000, 22050, 44100, 48000],
                                  index=[8000, 16000, 22050, 44100, 48000].index(settings["audio"]["sample_rate"]),
-                                 key=f"audio_sample_rate_{id(settings)}")
-        gain = st.slider("ゲイン", 0.1, 5.0, settings["audio"]["gain"], 0.1, key=f"audio_gain_{id(settings)}")
-        duration = st.slider("録音時間（秒）", 1, 60, settings["audio"]["duration"], key=f"audio_duration_{id(settings)}")
+                                 key=f"audio_sample_rate_{st.session_state.audio_sample_rate_key}")
+        gain = st.slider("ゲイン", 0.1, 5.0, settings["audio"]["gain"], 0.1, key=f"audio_gain_{st.session_state.audio_gain_key}")
+        duration = st.slider("録音時間（秒）", 1, 60, settings["audio"]["duration"], key=f"audio_duration_{st.session_state.audio_duration_key}")
         
         settings["audio"]["sample_rate"] = sample_rate
         settings["audio"]["gain"] = gain
@@ -71,13 +81,22 @@ def render_audio_settings_tab(settings: Dict[str, Any], settings_manager: Enhanc
     
     with col2:
         st.write("**詳細設定**")
-        channels = st.selectbox("チャンネル数", [1, 2], index=settings["audio"]["channels"] - 1, key=f"audio_channels_{id(settings)}")
+        
+        # 詳細設定のキーを一意にする
+        if 'audio_channels_key' not in st.session_state:
+            st.session_state.audio_channels_key = str(uuid.uuid4())
+        if 'audio_chunk_size_key' not in st.session_state:
+            st.session_state.audio_chunk_size_key = str(uuid.uuid4())
+        if 'audio_format_key' not in st.session_state:
+            st.session_state.audio_format_key = str(uuid.uuid4())
+        
+        channels = st.selectbox("チャンネル数", [1, 2], index=settings["audio"]["channels"] - 1, key=f"audio_channels_{st.session_state.audio_channels_key}")
         chunk_size = st.selectbox("チャンクサイズ", [512, 1024, 2048, 4096],
                                 index=[512, 1024, 2048, 4096].index(settings["audio"]["chunk_size"]),
-                                key=f"audio_chunk_size_{id(settings)}")
+                                key=f"audio_chunk_size_{st.session_state.audio_chunk_size_key}")
         format_type = st.selectbox("フォーマット", ["paInt16", "paFloat32"],
                                  index=["paInt16", "paFloat32"].index(settings["audio"]["format"]),
-                                 key=f"audio_format_{id(settings)}")
+                                 key=f"audio_format_{st.session_state.audio_format_key}")
         
         settings["audio"]["channels"] = channels
         settings["audio"]["chunk_size"] = chunk_size
@@ -87,8 +106,13 @@ def render_device_settings_tab(settings, settings_manager):
     """デバイス設定タブ"""
     st.write("**🎙️ デバイス設定**")
     
+    # デバイスマネージャーを初期化
     device_manager = DeviceManager()
     devices = device_manager.get_available_devices()
+    
+    if not devices:
+        st.error("利用可能な録音デバイスが見つかりません。")
+        return
     
     col1, col2 = st.columns(2)
     
@@ -97,11 +121,16 @@ def render_device_settings_tab(settings, settings_manager):
         
         # デバイス一覧を表示
         device_names = [f"{d['name']} (Index: {d['index']})" for d in devices]
+        
+        # セッション状態を使用して一意のキーを生成
+        if 'device_selection_key' not in st.session_state:
+            st.session_state.device_selection_key = str(uuid.uuid4())
+        
         selected_device_name = st.selectbox(
             "録音デバイスを選択",
             device_names,
             index=settings["device"]["selected_device_index"] or 0,
-            key=f"device_selection_{id(settings)}"
+            key=f"device_selection_{st.session_state.device_selection_key}"
         )
         
         # 選択されたデバイスのインデックスを取得
@@ -125,7 +154,11 @@ def render_device_settings_tab(settings, settings_manager):
         settings["device"]["auto_select_default"] = auto_select
         settings["device"]["test_device_on_select"] = test_device
         
-        if st.button("🎤 デバイステスト", key=f"test_device_button_{id(settings)}"):
+        # テストボタンのキーも一意にする
+        if 'test_device_button_key' not in st.session_state:
+            st.session_state.test_device_button_key = str(uuid.uuid4())
+        
+        if st.button("🎤 デバイステスト", key=f"test_device_button_{st.session_state.test_device_button_key}"):
             st.info("デバイステスト機能は現在開発中です")
 
 def render_transcription_settings_tab(settings, settings_manager):
@@ -136,13 +169,22 @@ def render_transcription_settings_tab(settings, settings_manager):
     
     with col1:
         st.write("**Whisper設定**")
+        
+        # 各ウィジェットのキーを一意にする
+        if 'whisper_model_size_key' not in st.session_state:
+            st.session_state.whisper_model_size_key = str(uuid.uuid4())
+        if 'whisper_language_key' not in st.session_state:
+            st.session_state.whisper_language_key = str(uuid.uuid4())
+        if 'whisper_temperature_key' not in st.session_state:
+            st.session_state.whisper_temperature_key = str(uuid.uuid4())
+        
         model_size = st.selectbox("モデルサイズ", ["tiny", "base", "small", "medium", "large"], 
                                 index=["tiny", "base", "small", "medium", "large"].index(settings["whisper"]["model_size"]),
-                                key=f"whisper_model_size_{id(settings)}")
+                                key=f"whisper_model_size_{st.session_state.whisper_model_size_key}")
         language = st.selectbox("言語", ["ja", "en", "auto"], 
                               index=["ja", "en", "auto"].index(settings["whisper"]["language"]),
-                              key=f"whisper_language_{id(settings)}")
-        temperature = st.slider("Temperature", 0.0, 1.0, settings["whisper"]["temperature"], 0.1, key=f"whisper_temperature_{id(settings)}")
+                              key=f"whisper_language_{st.session_state.whisper_language_key}")
+        temperature = st.slider("Temperature", 0.0, 1.0, settings["whisper"]["temperature"], 0.1, key=f"whisper_temperature_{st.session_state.whisper_temperature_key}")
         
         settings["whisper"]["model_size"] = model_size
         settings["whisper"]["language"] = language
@@ -158,9 +200,17 @@ def render_transcription_settings_tab(settings, settings_manager):
         
         # 高度な設定
         with st.expander("🔧 高度なWhisper設定"):
-            compression_threshold = st.slider("圧縮比閾値", 0.0, 5.0, settings["whisper"]["compression_ratio_threshold"], 0.1)
-            logprob_threshold = st.slider("Logprob閾値", -5.0, 0.0, settings["whisper"]["logprob_threshold"], 0.1)
-            no_speech_threshold = st.slider("無音閾値", 0.0, 1.0, settings["whisper"]["no_speech_threshold"], 0.1)
+            # 高度な設定のキーも一意にする
+            if 'compression_threshold_key' not in st.session_state:
+                st.session_state.compression_threshold_key = str(uuid.uuid4())
+            if 'logprob_threshold_key' not in st.session_state:
+                st.session_state.logprob_threshold_key = str(uuid.uuid4())
+            if 'no_speech_threshold_key' not in st.session_state:
+                st.session_state.no_speech_threshold_key = str(uuid.uuid4())
+            
+            compression_threshold = st.slider("圧縮比閾値", 0.0, 5.0, settings["whisper"]["compression_ratio_threshold"], 0.1, key=f"compression_threshold_{st.session_state.compression_threshold_key}")
+            logprob_threshold = st.slider("Logprob閾値", -5.0, 0.0, settings["whisper"]["logprob_threshold"], 0.1, key=f"logprob_threshold_{st.session_state.logprob_threshold_key}")
+            no_speech_threshold = st.slider("無音閾値", 0.0, 1.0, settings["whisper"]["no_speech_threshold"], 0.1, key=f"no_speech_threshold_{st.session_state.no_speech_threshold_key}")
             condition_previous = st.checkbox("前のテキストを条件とする", settings["whisper"]["condition_on_previous_text"])
             
             settings["whisper"]["compression_ratio_threshold"] = compression_threshold
@@ -188,9 +238,18 @@ def render_ui_settings_tab(settings, settings_manager):
     
     with col2:
         st.write("**自動録音設定**")
-        auto_start = st.checkbox("自動録音開始", settings["ui"]["auto_start_recording"])
-        auto_threshold = st.slider("自動録音閾値", 100, 1000, settings["ui"]["auto_recording_threshold"], 50)
-        auto_delay = st.slider("自動録音遅延 (秒)", 0.1, 5.0, settings["ui"]["auto_recording_delay"], 0.1)
+        
+        # 自動録音設定のキーも一意にする
+        if 'auto_start_key' not in st.session_state:
+            st.session_state.auto_start_key = str(uuid.uuid4())
+        if 'auto_threshold_key' not in st.session_state:
+            st.session_state.auto_threshold_key = str(uuid.uuid4())
+        if 'auto_delay_key' not in st.session_state:
+            st.session_state.auto_delay_key = str(uuid.uuid4())
+        
+        auto_start = st.checkbox("自動録音開始", settings["ui"]["auto_start_recording"], key=f"auto_start_{st.session_state.auto_start_key}")
+        auto_threshold = st.slider("自動録音閾値", 100, 1000, settings["ui"]["auto_recording_threshold"], 50, key=f"auto_threshold_{st.session_state.auto_threshold_key}")
+        auto_delay = st.slider("自動録音遅延 (秒)", 0.1, 5.0, settings["ui"]["auto_recording_delay"], 0.1, key=f"auto_delay_{st.session_state.auto_delay_key}")
         
         settings["ui"]["auto_start_recording"] = auto_start
         settings["ui"]["auto_recording_threshold"] = auto_threshold
@@ -270,7 +329,11 @@ def render_user_dictionary_tab() -> None:
             definition = st.text_area("定義")
             pronunciation = st.text_input("発音（オプション）")
         
-        if st.button("追加", key=f"add_dictionary_entry_{id(settings)}"):
+        # 追加ボタンのキーを一意にする
+        if 'add_dictionary_entry_key' not in st.session_state:
+            st.session_state.add_dictionary_entry_key = str(uuid.uuid4())
+        
+        if st.button("追加", key=f"add_dictionary_entry_{st.session_state.add_dictionary_entry_key}"):
             if term and definition:
                 if dictionary_manager.add_entry(category, term, definition, pronunciation):
                     st.success(f"✅ '{term}' を辞書に追加しました")
@@ -296,11 +359,15 @@ def render_user_dictionary_tab() -> None:
                             st.write(f"発音: {entry_data['pronunciation']}")
                     
                     with col2:
-                        if st.button(f"編集", key=f"edit_{category_name}_{term}"):
+                        # 編集ボタンのキーを一意にする
+                        edit_key = f"edit_{category_name}_{term}_{uuid.uuid4().hex[:8]}"
+                        if st.button(f"編集", key=edit_key):
                             st.info("編集機能は現在開発中です")
                     
                     with col3:
-                        if st.button(f"削除", key=f"delete_{category_name}_{term}"):
+                        # 削除ボタンのキーを一意にする
+                        delete_key = f"delete_{category_name}_{term}_{uuid.uuid4().hex[:8]}"
+                        if st.button(f"削除", key=delete_key):
                             if dictionary_manager.remove_entry(category_name, term):
                                 st.success(f"✅ '{term}' を削除しました")
                                 st.rerun()
@@ -334,12 +401,20 @@ def render_commands_tab() -> None:
             description = st.text_input("説明")
         
         with col2:
-            output_format = st.selectbox("出力形式", ["text", "bullet_points", "summary", "text_file"], key=f"command_output_format_{id(settings)}")
+            # 出力形式のキーを一意にする
+            if 'command_output_format_key' not in st.session_state:
+                st.session_state.command_output_format_key = str(uuid.uuid4())
+            
+            output_format = st.selectbox("出力形式", ["text", "bullet_points", "summary", "text_file"], key=f"command_output_format_{st.session_state.command_output_format_key}")
             enabled = st.checkbox("有効化", True)
         
         llm_prompt = st.text_area("LLMプロンプト", placeholder="以下の文字起こし結果を処理してください：\n\n{text}")
         
-        if st.button("追加", key=f"add_command_{id(settings)}"):
+        # 追加ボタンのキーを一意にする
+        if 'add_command_key' not in st.session_state:
+            st.session_state.add_command_key = str(uuid.uuid4())
+        
+        if st.button("追加", key=f"add_command_{st.session_state.add_command_key}"):
             if name and description and llm_prompt:
                 if command_manager.add_command(name, description, llm_prompt, output_format, enabled):
                     st.success(f"✅ '{name}' コマンドを追加しました")
@@ -358,13 +433,18 @@ def render_commands_tab() -> None:
                 st.write(f"**説明**: {cmd_data['description']}")
                 st.write(f"**出力形式**: {cmd_data['output_format']}")
                 st.write(f"**有効**: {'✅' if cmd_data['enabled'] else '❌'}")
+                st.write(f"**プロンプト**: {cmd_data['llm_prompt'][:100]}...")
             
             with col2:
-                if st.button(f"編集", key=f"edit_cmd_{cmd_name}"):
+                # 編集ボタンのキーを一意にする
+                edit_key = f"edit_cmd_{cmd_name}_{uuid.uuid4().hex[:8]}"
+                if st.button("編集", key=edit_key):
                     st.info("編集機能は現在開発中です")
             
             with col3:
-                if st.button(f"削除", key=f"delete_cmd_{cmd_name}"):
+                # 削除ボタンのキーを一意にする
+                delete_key = f"delete_cmd_{cmd_name}_{uuid.uuid4().hex[:8]}"
+                if st.button("削除", key=delete_key):
                     if command_manager.remove_command(cmd_name):
                         st.success(f"✅ '{cmd_name}' コマンドを削除しました")
                         st.rerun()
@@ -405,13 +485,15 @@ def render_file_management_tab():
                 )
         
         with col3:
-            if st.button(f"🗑️ 削除", key=f"delete_{file}"):
+            # 削除ボタンのキーを一意にする
+            delete_key = f"delete_{file}_{uuid.uuid4().hex[:8]}"
+            if st.button(f"🗑️ 削除", key=delete_key):
                 try:
                     os.remove(file_path)
                     st.success(f"✅ {file} を削除しました")
                     st.rerun()
                 except Exception as e:
-                    st.error(f"❌ 削除エラー: {e}") 
+                    st.error(f"❌ 削除エラー: {e}")
 
 def render_task_management_tab():
     """タスク管理タブのレンダリング"""
@@ -426,26 +508,33 @@ def render_task_management_tab():
     with task_tab1:
         st.write("### 📝 タスク一覧")
         
-        # フィルター
+        # フィルターのキーを一意にする
+        if 'task_status_filter_key' not in st.session_state:
+            st.session_state.task_status_filter_key = str(uuid.uuid4())
+        if 'task_priority_filter_key' not in st.session_state:
+            st.session_state.task_priority_filter_key = str(uuid.uuid4())
+        if 'task_category_filter_key' not in st.session_state:
+            st.session_state.task_category_filter_key = str(uuid.uuid4())
+        
         status_filter = st.selectbox(
             "ステータス",
             ["all", "pending", "in_progress", "completed"],
             format_func=lambda x: {"all": "すべて", "pending": "未完了", "in_progress": "進行中", "completed": "完了"}[x],
-            key=f"task_status_filter_{id(settings)}"
+            key=f"task_status_filter_{st.session_state.task_status_filter_key}"
         )
         
         priority_filter = st.selectbox(
             "優先度",
             ["all", "low", "medium", "high"],
             format_func=lambda x: {"all": "すべて", "low": "低", "medium": "中", "high": "高"}[x],
-            key=f"task_priority_filter_{id(settings)}"
+            key=f"task_priority_filter_{st.session_state.task_priority_filter_key}"
         )
         
         category_filter = st.selectbox(
             "カテゴリ",
             ["all", "general", "work", "personal", "音声文字起こし"],
             format_func=lambda x: {"all": "すべて", "general": "一般", "work": "仕事", "personal": "個人", "音声文字起こし": "音声文字起こし"}[x],
-            key=f"task_category_filter_{id(settings)}"
+            key=f"task_category_filter_{st.session_state.task_category_filter_key}"
         )
         
         # タスクの読み込みとフィルター
@@ -482,20 +571,22 @@ def render_task_management_tab():
                         st.write(f"**作成日**: {task['created_at'][:10]}")
                     
                     with col2:
-                        # ステータス変更
+                        # ステータス変更のキーを一意にする
+                        status_key = f"status_{task_id}_{uuid.uuid4().hex[:8]}"
                         new_status = st.selectbox(
                             "ステータス",
                             ["pending", "in_progress", "completed"],
                             index=["pending", "in_progress", "completed"].index(task["status"]),
-                            key=f"status_{task_id}"
+                            key=status_key
                         )
                         
                         if new_status != task["status"]:
                             task_manager.update_task(task_id, status=new_status)
                             st.success("ステータスを更新しました")
                         
-                        # 削除ボタン
-                        if st.button("🗑️ 削除", key=f"delete_{task_id}"):
+                        # 削除ボタンのキーを一意にする
+                        delete_key = f"delete_{task_id}_{uuid.uuid4().hex[:8]}"
+                        if st.button("🗑️ 削除", key=delete_key):
                             if task_manager.delete_task(task_id):
                                 st.success("タスクを削除しました")
                                 st.rerun()
@@ -505,17 +596,25 @@ def render_task_management_tab():
     with task_tab2:
         st.write("### ➕ タスク追加")
         
+        # フォーム内のキーを一意にする
+        if 'add_task_priority_key' not in st.session_state:
+            st.session_state.add_task_priority_key = str(uuid.uuid4())
+        if 'add_task_category_key' not in st.session_state:
+            st.session_state.add_task_category_key = str(uuid.uuid4())
+        if 'add_task_due_date_key' not in st.session_state:
+            st.session_state.add_task_due_date_key = str(uuid.uuid4())
+        
         with st.form("add_task_form"):
             title = st.text_input("タイトル *")
             description = st.text_area("説明")
             
             col1, col2, col3 = st.columns(3)
             with col1:
-                priority = st.selectbox("優先度", ["low", "medium", "high"], key=f"add_task_priority_{id(settings)}")
+                priority = st.selectbox("優先度", ["low", "medium", "high"], key=f"add_task_priority_{st.session_state.add_task_priority_key}")
             with col2:
-                category = st.selectbox("カテゴリ", ["general", "work", "personal", "音声文字起こし"], key=f"add_task_category_{id(settings)}")
+                category = st.selectbox("カテゴリ", ["general", "work", "personal", "音声文字起こし"], key=f"add_task_category_{st.session_state.add_task_category_key}")
             with col3:
-                due_date = st.date_input("期限", key=f"add_task_due_date_{id(settings)}")
+                due_date = st.date_input("期限", key=f"add_task_due_date_{st.session_state.add_task_due_date_key}")
             
             submitted = st.form_submit_button("タスクを追加")
             
@@ -593,8 +692,9 @@ def render_calendar_management_tab():
                     if event['end_date']:
                         st.write(f"**終了**: {event['end_date']}")
                     
-                    # 削除ボタン
-                    if st.button("🗑️ 削除", key=f"delete_event_{event_id}"):
+                    # 削除ボタンのキーを一意にする
+                    delete_key = f"delete_event_{event_id}_{uuid.uuid4().hex[:8]}"
+                    if st.button("🗑️ 削除", key=delete_key):
                         if calendar_manager.delete_event(event_id):
                             st.success("イベントを削除しました")
                             st.rerun()
@@ -603,6 +703,12 @@ def render_calendar_management_tab():
     
     with cal_tab2:
         st.write("### ➕ イベント追加")
+        
+        # フォーム内のキーを一意にする
+        if 'add_event_category_key' not in st.session_state:
+            st.session_state.add_event_category_key = str(uuid.uuid4())
+        if 'add_event_all_day_key' not in st.session_state:
+            st.session_state.add_event_all_day_key = str(uuid.uuid4())
         
         with st.form("add_event_form"):
             title = st.text_input("タイトル *")
@@ -614,9 +720,9 @@ def render_calendar_management_tab():
             with col2:
                 end_date = st.date_input("終了日")
             with col3:
-                category = st.selectbox("カテゴリ", ["general", "work", "personal", "音声文字起こし"], key=f"add_event_category_{id(settings)}")
+                category = st.selectbox("カテゴリ", ["general", "work", "personal", "音声文字起こし"], key=f"add_event_category_{st.session_state.add_event_category_key}")
             with col2:
-                all_day = st.checkbox("終日", key=f"add_event_all_day_{id(settings)}")
+                all_day = st.checkbox("終日", key=f"add_event_all_day_{st.session_state.add_event_all_day_key}")
             with col3:
                 pass
             
@@ -782,8 +888,9 @@ def render_google_calendar_tab() -> None:
                             st.write(f"**終了:** {event['end'].get('dateTime', event['end'].get('date'))}")
                             st.write(f"**説明:** {event.get('description', '説明なし')}")
                             
-                            # 削除ボタン
-                            if st.button(f"🗑️ 削除", key=f"delete_{event['id']}"):
+                            # 削除ボタンのキーを一意にする
+                            delete_key = f"delete_{event['id']}_{uuid.uuid4().hex[:8]}"
+                            if st.button(f"🗑️ 削除", key=delete_key):
                                 if google_calendar.delete_event(event['id']):
                                     st.success("✅ イベントを削除しました")
                                     st.rerun()
@@ -848,7 +955,9 @@ class SettingsUI:
                         try:
                             with open(filepath, 'r', encoding='utf-8') as f:
                                 content = f.read()
-                            st.text_area("内容", content, height=200, key=f"history_{file}")
+                            # text_areaのキーを一意にする
+                            text_area_key = f"history_{file}_{uuid.uuid4().hex[:8]}"
+                            st.text_area("内容", content, height=200, key=text_area_key)
                         except Exception as e:
                             st.error(f"ファイル読み込みエラー: {e}")
             else:
