@@ -11,6 +11,7 @@ from typing import Optional
 def get_secret(key: str, default: Optional[str] = None) -> Optional[str]:
     """
     環境変数またはStreamlit Secretsから値を取得
+    Streamlit Secretsを優先して使用
     
     Args:
         key: 設定キー
@@ -19,18 +20,20 @@ def get_secret(key: str, default: Optional[str] = None) -> Optional[str]:
     Returns:
         設定値またはデフォルト値
     """
-    # 1. 環境変数を優先
-    value = os.getenv(key)
-    if value:
-        return value
-    
-    # 2. Streamlit Secretsを確認
+    # 1. Streamlit Secretsを優先（.tomlファイルから読み込み）
     try:
-        if hasattr(st, 'secrets') and key in st.secrets:
-            return st.secrets[key]
-    except Exception:
-        # Streamlit Secretsが利用できない場合は無視
-        pass
+        if hasattr(st, 'secrets') and st.secrets is not None:
+            if key in st.secrets:
+                value = st.secrets[key]
+                if value and value.strip():  # 空でないことを確認
+                    return value
+    except Exception as e:
+        st.warning(f"Streamlit Secretsの読み込みエラー: {e}")
+    
+    # 2. 環境変数を確認
+    value = os.getenv(key)
+    if value and value.strip():
+        return value
     
     # 3. デフォルト値を返す
     return default
@@ -43,6 +46,13 @@ def is_streamlit_cloud() -> bool:
     Returns:
         Streamlit Cloud環境の場合True
     """
+    # Streamlit Secretsが利用可能かどうかを最優先でチェック
+    try:
+        if hasattr(st, 'secrets') and st.secrets is not None:
+            return True
+    except Exception:
+        pass
+    
     # Streamlit Cloud特有の環境変数をチェック
     streamlit_cloud_indicators = [
         'STREAMLIT_SHARING',
@@ -59,11 +69,7 @@ def is_streamlit_cloud() -> bool:
             elif indicator != 'HOSTNAME':
                 return True
     
-    # Streamlit Secretsが利用可能かどうかもチェック
-    try:
-        return hasattr(st, 'secrets') and bool(st.secrets)
-    except Exception:
-        return False
+    return False
 
 
 def get_google_credentials() -> tuple[Optional[str], Optional[str], Optional[str]]:
@@ -99,15 +105,45 @@ def show_environment_info() -> None:
     is_cloud = is_streamlit_cloud()
     st.sidebar.write(f"**環境**: {'☁️ Streamlit Cloud' if is_cloud else '💻 ローカル'}")
     
-    # 設定状況の確認
-    client_id, client_secret, refresh_token = get_google_credentials()
+    # 設定値の確認（機密情報は一部マスク）
     openai_key = get_openai_api_key()
+    google_client_id = get_secret('GOOGLE_CLIENT_ID')
     
     st.sidebar.write("**設定状況**:")
-    st.sidebar.write(f"- Google Client ID: {'✅' if client_id else '❌'}")
-    st.sidebar.write(f"- Google Client Secret: {'✅' if client_secret else '❌'}")
-    st.sidebar.write(f"- Google Refresh Token: {'✅' if refresh_token else '❌'}")
-    st.sidebar.write(f"- OpenAI API Key: {'✅' if openai_key else '❌'}")
+    st.sidebar.write(f"OpenAI API: {'✅ 設定済み' if openai_key else '❌ 未設定'}")
+    st.sidebar.write(f"Google Client ID: {'✅ 設定済み' if google_client_id else '❌ 未設定'}")
     
-    if is_cloud and not all([client_id, client_secret, openai_key]):
-        st.sidebar.warning("⚠️ Streamlit Cloud Secretsで設定を確認してください")
+    # Streamlit Secretsの利用状況
+    try:
+        if hasattr(st, 'secrets') and st.secrets is not None:
+            st.sidebar.write("**Secrets**: ✅ 利用可能")
+        else:
+            st.sidebar.write("**Secrets**: ❌ 利用不可")
+    except Exception:
+        st.sidebar.write("**Secrets**: ❌ エラー")
+
+
+def validate_secrets() -> bool:
+    """
+    必要なシークレットが設定されているかチェック
+    
+    Returns:
+        必要な設定が揃っている場合True
+    """
+    required_secrets = [
+        'OPENAI_API_KEY',
+        'GOOGLE_CLIENT_ID',
+        'GOOGLE_CLIENT_SECRET'
+    ]
+    
+    missing_secrets = []
+    for secret in required_secrets:
+        if not get_secret(secret):
+            missing_secrets.append(secret)
+    
+    if missing_secrets:
+        st.error(f"⚠️ 必要な設定が不足しています: {', '.join(missing_secrets)}")
+        st.info("📝 `.streamlit/secrets.toml`ファイルまたは環境変数で設定してください。")
+        return False
+    
+    return True

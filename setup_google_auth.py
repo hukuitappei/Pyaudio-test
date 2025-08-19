@@ -71,7 +71,31 @@ GOOGLE_CLIENT_SECRET={client_secret}
     except Exception as e:
         print(f"\n❌ .envファイルの作成に失敗しました: {e}")
         print("手動で.envファイルを作成してください")
-    print("📝 環境変数を設定しました:")
+    
+    # .streamlit/secrets.tomlファイルの作成
+    try:
+        # .streamlitディレクトリの作成
+        os.makedirs('.streamlit', exist_ok=True)
+        
+        # secrets.tomlファイルの作成
+        secrets_content = f"""# Streamlit Secrets設定ファイル
+# 全てのキーをルートレベルで統一
+
+GOOGLE_CLIENT_ID = "{client_id}"
+GOOGLE_CLIENT_SECRET = "{client_secret}"
+"""
+        
+        if refresh_token:
+            secrets_content += f'GOOGLE_REFRESH_TOKEN = "{refresh_token}"\n'
+        
+        with open('.streamlit/secrets.toml', 'w', encoding='utf-8') as f:
+            f.write(secrets_content)
+        print("✅ .streamlit/secrets.tomlファイルを作成しました")
+    except Exception as e:
+        print(f"\n❌ .streamlit/secrets.tomlファイルの作成に失敗しました: {e}")
+        print("手動で.streamlit/secrets.tomlファイルを作成してください")
+    
+    print("📝 設定を完了しました:")
     print(f"   GOOGLE_CLIENT_ID={client_id}")
     print(f"   GOOGLE_CLIENT_SECRET={'*' * len(client_secret)}")
     if refresh_token:
@@ -81,7 +105,8 @@ GOOGLE_CLIENT_SECRET={client_secret}
     print("1. Streamlitアプリケーションを起動")
     print("2. Googleカレンダータブで認証状態を確認")
     if not refresh_token:
-        print("3. 初回認証後にRefresh Tokenを取得して.envファイルに追加")
+        print("3. 初回認証後にRefresh Tokenを取得して設定ファイルに追加")
+    print("4. Streamlit Cloudにデプロイする場合は、.streamlit/secrets.tomlの内容をStreamlit Cloud Secretsにコピー")
 
 def setup_file_authentication():
     """ファイル認証の設定"""
@@ -160,10 +185,44 @@ def check_current_settings():
     else:
         print("❌ .env: 存在しない")
     
+    # .streamlit/secrets.tomlファイルの確認
+    if os.path.exists('.streamlit/secrets.toml'):
+        print("✅ .streamlit/secrets.toml: 存在")
+        try:
+            import toml
+            with open('.streamlit/secrets.toml', 'r', encoding='utf-8') as f:
+                secrets_data = toml.load(f)
+            
+            if 'GOOGLE_CLIENT_ID' in secrets_data:
+                print(f"✅ Streamlit Secrets GOOGLE_CLIENT_ID: {secrets_data['GOOGLE_CLIENT_ID']}")
+            else:
+                print("❌ Streamlit Secrets GOOGLE_CLIENT_ID: 未設定")
+            
+            if 'GOOGLE_CLIENT_SECRET' in secrets_data:
+                secret = secrets_data['GOOGLE_CLIENT_SECRET']
+                print(f"✅ Streamlit Secrets GOOGLE_CLIENT_SECRET: {'*' * len(secret)}")
+            else:
+                print("❌ Streamlit Secrets GOOGLE_CLIENT_SECRET: 未設定")
+            
+            if 'GOOGLE_REFRESH_TOKEN' in secrets_data:
+                token = secrets_data['GOOGLE_REFRESH_TOKEN']
+                print(f"✅ Streamlit Secrets GOOGLE_REFRESH_TOKEN: {'*' * len(token)}")
+            else:
+                print("❌ Streamlit Secrets GOOGLE_REFRESH_TOKEN: 未設定")
+                
+        except ImportError:
+            print("⚠️ tomlライブラリがインストールされていないため、詳細確認ができません")
+        except Exception as e:
+            print(f"❌ .streamlit/secrets.tomlの読み込みエラー: {e}")
+    else:
+        print("❌ .streamlit/secrets.toml: 存在しない")
+    
     # 推奨設定の確認
     print("\n💡 推奨設定:")
     if client_id and client_secret:
         print("✅ 環境変数による認証が設定されています（推奨）")
+    elif os.path.exists('.streamlit/secrets.toml'):
+        print("✅ Streamlit Secretsによる認証が設定されています（Streamlit Cloud推奨）")
     elif os.path.exists('credentials.json'):
         print("⚠️ ファイル認証が設定されています（開発用）")
     else:

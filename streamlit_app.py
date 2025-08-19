@@ -106,19 +106,27 @@ class AudioRecorderApp:
     
     def setup_openai(self) -> Optional[openai.OpenAI]:
         """OpenAI APIの設定"""
+        api_key = None
+        
+        # 1. config_managerを使用（推奨）
         if CONFIG_AVAILABLE:
             api_key = get_secret("OPENAI_API_KEY")
-        else:
-            # フォールバック: 環境変数またはStreamlit Secretsから直接取得
-            api_key = os.getenv("OPENAI_API_KEY")
-            if not api_key:
-                try:
+        
+        # 2. フォールバック: st.secretsを直接使用
+        if not api_key:
+            try:
+                if hasattr(st, 'secrets') and st.secrets is not None:
                     api_key = st.secrets.get("OPENAI_API_KEY")
-                except:
-                    api_key = None
+            except Exception as e:
+                st.warning(f"Streamlit Secretsの読み込みエラー: {e}")
+        
+        # 3. フォールバック: 環境変数
+        if not api_key:
+            api_key = os.getenv("OPENAI_API_KEY")
         
         if not api_key:
-            st.error("OpenAI APIキーが設定されていません。環境変数またはStreamlit Secretsで設定してください。")
+            st.error("⚠️ OpenAI APIキーが設定されていません。")
+            st.info("📝 `.streamlit/secrets.toml`ファイルまたは環境変数で設定してください。")
             return None
         
         try:
@@ -503,6 +511,13 @@ def main():
         layout="wide",
         initial_sidebar_state="expanded"
     )
+    
+    # 設定の検証
+    if CONFIG_AVAILABLE:
+        from config_manager import validate_secrets, show_environment_info
+        if not validate_secrets():
+            st.stop()
+        show_environment_info()
     
     # アプリケーション実行
     app = AudioRecorderApp()

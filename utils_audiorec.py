@@ -904,7 +904,20 @@ class GoogleCalendarManager:
     def _create_credentials_from_env(self, client_id: str, client_secret: str) -> Optional[Credentials]:
         """環境変数またはStreamlit Secretsから認証情報を作成"""
         try:
+            # 1. config_managerを使用（推奨）
             refresh_token = get_secret('GOOGLE_REFRESH_TOKEN')
+            
+            # 2. フォールバック: st.secretsを直接使用
+            if not refresh_token:
+                try:
+                    if hasattr(st, 'secrets') and st.secrets is not None:
+                        refresh_token = st.secrets.get('GOOGLE_REFRESH_TOKEN')
+                except Exception as e:
+                    st.warning(f"Streamlit Secretsの読み込みエラー: {e}")
+            
+            # 3. フォールバック: 環境変数
+            if not refresh_token:
+                refresh_token = os.getenv('GOOGLE_REFRESH_TOKEN')
             
             if not refresh_token:
                 st.warning("⚠️ GOOGLE_REFRESH_TOKENが設定されていません。初回認証が必要です。")
