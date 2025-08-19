@@ -6,9 +6,9 @@ app_audiorec.py用の拡張設定UIコンポーネント
 # 標準ライブラリ
 import json
 import os
+import uuid
 from datetime import datetime, date
 from typing import Dict, Any, List, Optional
-import uuid
 
 # サードパーティライブラリ
 import streamlit as st
@@ -744,12 +744,15 @@ def render_calendar_management_tab():
     with cal_tab3:
         st.write("### 📊 イベント一覧")
         
-        # カテゴリフィルター
+        # カテゴリフィルターのキーを一意にする
+        if 'calendar_category_filter_key' not in st.session_state:
+            st.session_state.calendar_category_filter_key = str(uuid.uuid4())
+        
         category_filter = st.selectbox(
             "カテゴリ",
             ["all", "general", "work", "personal", "音声文字起こし"],
             format_func=lambda x: {"all": "すべて", "general": "一般", "work": "仕事", "personal": "個人", "音声文字起こし": "音声文字起こし"}[x],
-            key=f"calendar_category_filter_{id(settings)}"
+            key=f"calendar_category_filter_{st.session_state.calendar_category_filter_key}"
         )
         
         # イベントの読み込みとフィルター
