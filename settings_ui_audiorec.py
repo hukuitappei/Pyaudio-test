@@ -61,9 +61,9 @@ def render_audio_settings_tab(settings: Dict[str, Any], settings_manager: Enhanc
         st.write("**録音設定**")
         sample_rate = st.selectbox("サンプルレート", [8000, 16000, 22050, 44100, 48000],
                                  index=[8000, 16000, 22050, 44100, 48000].index(settings["audio"]["sample_rate"]),
-                                 key="audio_sample_rate")
-        gain = st.slider("ゲイン", 0.1, 5.0, settings["audio"]["gain"], 0.1, key="audio_gain")
-        duration = st.slider("録音時間（秒）", 1, 60, settings["audio"]["duration"], key="audio_duration")
+                                 key=f"audio_sample_rate_{id(settings)}")
+        gain = st.slider("ゲイン", 0.1, 5.0, settings["audio"]["gain"], 0.1, key=f"audio_gain_{id(settings)}")
+        duration = st.slider("録音時間（秒）", 1, 60, settings["audio"]["duration"], key=f"audio_duration_{id(settings)}")
         
         settings["audio"]["sample_rate"] = sample_rate
         settings["audio"]["gain"] = gain
@@ -71,13 +71,13 @@ def render_audio_settings_tab(settings: Dict[str, Any], settings_manager: Enhanc
     
     with col2:
         st.write("**詳細設定**")
-        channels = st.selectbox("チャンネル数", [1, 2], index=settings["audio"]["channels"] - 1, key="audio_channels")
+        channels = st.selectbox("チャンネル数", [1, 2], index=settings["audio"]["channels"] - 1, key=f"audio_channels_{id(settings)}")
         chunk_size = st.selectbox("チャンクサイズ", [512, 1024, 2048, 4096],
                                 index=[512, 1024, 2048, 4096].index(settings["audio"]["chunk_size"]),
-                                key="audio_chunk_size")
+                                key=f"audio_chunk_size_{id(settings)}")
         format_type = st.selectbox("フォーマット", ["paInt16", "paFloat32"],
                                  index=["paInt16", "paFloat32"].index(settings["audio"]["format"]),
-                                 key="audio_format")
+                                 key=f"audio_format_{id(settings)}")
         
         settings["audio"]["channels"] = channels
         settings["audio"]["chunk_size"] = chunk_size
@@ -101,7 +101,7 @@ def render_device_settings_tab(settings, settings_manager):
             "録音デバイスを選択",
             device_names,
             index=settings["device"]["selected_device_index"] or 0,
-            key="device_selection"
+            key=f"device_selection_{id(settings)}"
         )
         
         # 選択されたデバイスのインデックスを取得
@@ -125,7 +125,7 @@ def render_device_settings_tab(settings, settings_manager):
         settings["device"]["auto_select_default"] = auto_select
         settings["device"]["test_device_on_select"] = test_device
         
-        if st.button("🎤 デバイステスト", key="test_device_button"):
+        if st.button("🎤 デバイステスト", key=f"test_device_button_{id(settings)}"):
             st.info("デバイステスト機能は現在開発中です")
 
 def render_transcription_settings_tab(settings, settings_manager):
@@ -138,11 +138,11 @@ def render_transcription_settings_tab(settings, settings_manager):
         st.write("**Whisper設定**")
         model_size = st.selectbox("モデルサイズ", ["tiny", "base", "small", "medium", "large"], 
                                 index=["tiny", "base", "small", "medium", "large"].index(settings["whisper"]["model_size"]),
-                                key="whisper_model_size")
+                                key=f"whisper_model_size_{id(settings)}")
         language = st.selectbox("言語", ["ja", "en", "auto"], 
                               index=["ja", "en", "auto"].index(settings["whisper"]["language"]),
-                              key="whisper_language")
-        temperature = st.slider("Temperature", 0.0, 1.0, settings["whisper"]["temperature"], 0.1, key="whisper_temperature")
+                              key=f"whisper_language_{id(settings)}")
+        temperature = st.slider("Temperature", 0.0, 1.0, settings["whisper"]["temperature"], 0.1, key=f"whisper_temperature_{id(settings)}")
         
         settings["whisper"]["model_size"] = model_size
         settings["whisper"]["language"] = language
@@ -270,7 +270,7 @@ def render_user_dictionary_tab() -> None:
             definition = st.text_area("定義")
             pronunciation = st.text_input("発音（オプション）")
         
-        if st.button("追加", key="add_dictionary_entry"):
+        if st.button("追加", key=f"add_dictionary_entry_{id(settings)}"):
             if term and definition:
                 if dictionary_manager.add_entry(category, term, definition, pronunciation):
                     st.success(f"✅ '{term}' を辞書に追加しました")
@@ -334,12 +334,12 @@ def render_commands_tab() -> None:
             description = st.text_input("説明")
         
         with col2:
-            output_format = st.selectbox("出力形式", ["text", "bullet_points", "summary", "text_file"], key="command_output_format")
+            output_format = st.selectbox("出力形式", ["text", "bullet_points", "summary", "text_file"], key=f"command_output_format_{id(settings)}")
             enabled = st.checkbox("有効化", True)
         
         llm_prompt = st.text_area("LLMプロンプト", placeholder="以下の文字起こし結果を処理してください：\n\n{text}")
         
-        if st.button("追加", key="add_command"):
+        if st.button("追加", key=f"add_command_{id(settings)}"):
             if name and description and llm_prompt:
                 if command_manager.add_command(name, description, llm_prompt, output_format, enabled):
                     st.success(f"✅ '{name}' コマンドを追加しました")
@@ -431,21 +431,21 @@ def render_task_management_tab():
             "ステータス",
             ["all", "pending", "in_progress", "completed"],
             format_func=lambda x: {"all": "すべて", "pending": "未完了", "in_progress": "進行中", "completed": "完了"}[x],
-            key="task_status_filter"
+            key=f"task_status_filter_{id(settings)}"
         )
         
         priority_filter = st.selectbox(
             "優先度",
             ["all", "low", "medium", "high"],
             format_func=lambda x: {"all": "すべて", "low": "低", "medium": "中", "high": "高"}[x],
-            key="task_priority_filter"
+            key=f"task_priority_filter_{id(settings)}"
         )
         
         category_filter = st.selectbox(
             "カテゴリ",
             ["all", "general", "work", "personal", "音声文字起こし"],
             format_func=lambda x: {"all": "すべて", "general": "一般", "work": "仕事", "personal": "個人", "音声文字起こし": "音声文字起こし"}[x],
-            key="task_category_filter"
+            key=f"task_category_filter_{id(settings)}"
         )
         
         # タスクの読み込みとフィルター
@@ -511,11 +511,11 @@ def render_task_management_tab():
             
             col1, col2, col3 = st.columns(3)
             with col1:
-                priority = st.selectbox("優先度", ["low", "medium", "high"], key="add_task_priority")
+                priority = st.selectbox("優先度", ["low", "medium", "high"], key=f"add_task_priority_{id(settings)}")
             with col2:
-                category = st.selectbox("カテゴリ", ["general", "work", "personal", "音声文字起こし"], key="add_task_category")
+                category = st.selectbox("カテゴリ", ["general", "work", "personal", "音声文字起こし"], key=f"add_task_category_{id(settings)}")
             with col3:
-                due_date = st.date_input("期限", key="add_task_due_date")
+                due_date = st.date_input("期限", key=f"add_task_due_date_{id(settings)}")
             
             submitted = st.form_submit_button("タスクを追加")
             
@@ -614,9 +614,9 @@ def render_calendar_management_tab():
             with col2:
                 end_date = st.date_input("終了日")
             with col3:
-                category = st.selectbox("カテゴリ", ["general", "work", "personal", "音声文字起こし"], key="add_event_category")
+                category = st.selectbox("カテゴリ", ["general", "work", "personal", "音声文字起こし"], key=f"add_event_category_{id(settings)}")
             with col2:
-                all_day = st.checkbox("終日", key="add_event_all_day")
+                all_day = st.checkbox("終日", key=f"add_event_all_day_{id(settings)}")
             with col3:
                 pass
             
@@ -643,7 +643,7 @@ def render_calendar_management_tab():
             "カテゴリ",
             ["all", "general", "work", "personal", "音声文字起こし"],
             format_func=lambda x: {"all": "すべて", "general": "一般", "work": "仕事", "personal": "個人", "音声文字起こし": "音声文字起こし"}[x],
-            key="calendar_category_filter"
+            key=f"calendar_category_filter_{id(settings)}"
         )
         
         # イベントの読み込みとフィルター
