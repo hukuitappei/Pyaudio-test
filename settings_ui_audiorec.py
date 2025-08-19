@@ -141,8 +141,13 @@ def render_device_settings_tab(settings, settings_manager):
     
     with col2:
         st.write("**デバイス設定**")
-        auto_select = st.checkbox("デフォルトデバイスを自動選択", settings["device"]["auto_select_default"])
-        test_device = st.checkbox("デバイス選択時にテスト実行", settings["device"]["test_device_on_select"])
+        
+        # チェックボックスのキーを一意にする
+        auto_select_key = f"auto_select_{uuid.uuid4().hex[:8]}"
+        test_device_key = f"test_device_{uuid.uuid4().hex[:8]}"
+        
+        auto_select = st.checkbox("デフォルトデバイスを自動選択", settings["device"]["auto_select_default"], key=auto_select_key)
+        test_device = st.checkbox("デバイス選択時にテスト実行", settings["device"]["test_device_on_select"], key=test_device_key)
         
         settings["device"]["auto_select_default"] = auto_select
         settings["device"]["test_device_on_select"] = test_device
@@ -181,8 +186,13 @@ def render_transcription_settings_tab(settings, settings_manager):
     
     with col2:
         st.write("**文字起こし動作**")
-        auto_transcribe = st.checkbox("自動文字起こし", settings["transcription"]["auto_transcribe"])
-        save_transcriptions = st.checkbox("文字起こし結果を自動保存", settings["transcription"]["save_transcriptions"])
+        
+        # チェックボックスのキーを一意にする
+        auto_transcribe_key = f"auto_transcribe_{uuid.uuid4().hex[:8]}"
+        save_transcriptions_key = f"save_transcriptions_{uuid.uuid4().hex[:8]}"
+        
+        auto_transcribe = st.checkbox("自動文字起こし", settings["transcription"]["auto_transcribe"], key=auto_transcribe_key)
+        save_transcriptions = st.checkbox("文字起こし結果を自動保存", settings["transcription"]["save_transcriptions"], key=save_transcriptions_key)
         
         settings["transcription"]["auto_transcribe"] = auto_transcribe
         settings["transcription"]["save_transcriptions"] = save_transcriptions
@@ -193,11 +203,12 @@ def render_transcription_settings_tab(settings, settings_manager):
             compression_threshold_key = f"compression_threshold_{uuid.uuid4().hex[:8]}"
             logprob_threshold_key = f"logprob_threshold_{uuid.uuid4().hex[:8]}"
             no_speech_threshold_key = f"no_speech_threshold_{uuid.uuid4().hex[:8]}"
+            condition_previous_key = f"condition_previous_{uuid.uuid4().hex[:8]}"
             
             compression_threshold = st.slider("圧縮比閾値", 0.0, 5.0, settings["whisper"]["compression_ratio_threshold"], 0.1, key=compression_threshold_key)
             logprob_threshold = st.slider("Logprob閾値", -5.0, 0.0, settings["whisper"]["logprob_threshold"], 0.1, key=logprob_threshold_key)
             no_speech_threshold = st.slider("無音閾値", 0.0, 1.0, settings["whisper"]["no_speech_threshold"], 0.1, key=no_speech_threshold_key)
-            condition_previous = st.checkbox("前のテキストを条件とする", settings["whisper"]["condition_on_previous_text"])
+            condition_previous = st.checkbox("前のテキストを条件とする", settings["whisper"]["condition_on_previous_text"], key=condition_previous_key)
             
             settings["whisper"]["compression_ratio_threshold"] = compression_threshold
             settings["whisper"]["logprob_threshold"] = logprob_threshold
@@ -212,10 +223,17 @@ def render_ui_settings_tab(settings, settings_manager):
     
     with col1:
         st.write("**基本UI設定**")
-        show_advanced = st.checkbox("詳細オプションを表示", settings["ui"]["show_advanced_options"])
-        auto_save = st.checkbox("録音を自動保存", settings["ui"]["auto_save_recordings"])
-        show_quality = st.checkbox("音質分析を表示", settings["ui"]["show_quality_analysis"])
-        show_level = st.checkbox("レベル監視を表示", settings["ui"]["show_level_monitoring"])
+        
+        # チェックボックスのキーを一意にする
+        show_advanced_key = f"show_advanced_{uuid.uuid4().hex[:8]}"
+        auto_save_key = f"auto_save_{uuid.uuid4().hex[:8]}"
+        show_quality_key = f"show_quality_{uuid.uuid4().hex[:8]}"
+        show_level_key = f"show_level_{uuid.uuid4().hex[:8]}"
+        
+        show_advanced = st.checkbox("詳細オプションを表示", settings["ui"]["show_advanced_options"], key=show_advanced_key)
+        auto_save = st.checkbox("録音を自動保存", settings["ui"]["auto_save_recordings"], key=auto_save_key)
+        show_quality = st.checkbox("音質分析を表示", settings["ui"]["show_quality_analysis"], key=show_quality_key)
+        show_level = st.checkbox("レベル監視を表示", settings["ui"]["show_level_monitoring"], key=show_level_key)
         
         settings["ui"]["show_advanced_options"] = show_advanced
         settings["ui"]["auto_save_recordings"] = auto_save
@@ -246,17 +264,28 @@ def render_shortcut_settings_tab(settings, settings_manager):
     
     with col1:
         st.write("**ショートカット有効化**")
-        shortcuts_enabled = st.checkbox("ショートカットを有効化", settings["shortcuts"]["enabled"])
-        global_hotkeys = st.checkbox("グローバルホットキー", settings["shortcuts"]["global_hotkeys"])
+        
+        # チェックボックスのキーを一意にする
+        shortcuts_enabled_key = f"shortcuts_enabled_{uuid.uuid4().hex[:8]}"
+        global_hotkeys_key = f"global_hotkeys_{uuid.uuid4().hex[:8]}"
+        
+        shortcuts_enabled = st.checkbox("ショートカットを有効化", settings["shortcuts"]["enabled"], key=shortcuts_enabled_key)
+        global_hotkeys = st.checkbox("グローバルホットキー", settings["shortcuts"]["global_hotkeys"], key=global_hotkeys_key)
         
         settings["shortcuts"]["enabled"] = shortcuts_enabled
         settings["shortcuts"]["global_hotkeys"] = global_hotkeys
     
     with col2:
         st.write("**修飾キー設定**")
-        ctrl_mod = st.checkbox("Ctrlキー", settings["shortcuts"]["modifiers"]["ctrl"])
-        shift_mod = st.checkbox("Shiftキー", settings["shortcuts"]["modifiers"]["shift"])
-        alt_mod = st.checkbox("Altキー", settings["shortcuts"]["modifiers"]["alt"])
+        
+        # 修飾キーのチェックボックスのキーを一意にする
+        ctrl_mod_key = f"ctrl_mod_{uuid.uuid4().hex[:8]}"
+        shift_mod_key = f"shift_mod_{uuid.uuid4().hex[:8]}"
+        alt_mod_key = f"alt_mod_{uuid.uuid4().hex[:8]}"
+        
+        ctrl_mod = st.checkbox("Ctrlキー", settings["shortcuts"]["modifiers"]["ctrl"], key=ctrl_mod_key)
+        shift_mod = st.checkbox("Shiftキー", settings["shortcuts"]["modifiers"]["shift"], key=shift_mod_key)
+        alt_mod = st.checkbox("Altキー", settings["shortcuts"]["modifiers"]["alt"], key=alt_mod_key)
         
         settings["shortcuts"]["modifiers"]["ctrl"] = ctrl_mod
         settings["shortcuts"]["modifiers"]["shift"] = shift_mod
@@ -271,16 +300,28 @@ def render_shortcut_settings_tab(settings, settings_manager):
     col1, col2 = st.columns(2)
     
     with col1:
-        new_keys["start_recording"] = st.text_input("録音開始", shortcut_keys["start_recording"])
-        new_keys["stop_recording"] = st.text_input("録音停止", shortcut_keys["stop_recording"])
-        new_keys["transcribe"] = st.text_input("文字起こし", shortcut_keys["transcribe"])
-        new_keys["clear_text"] = st.text_input("テキストクリア", shortcut_keys["clear_text"])
+        # text_inputのキーを一意にする
+        start_recording_key = f"start_recording_{uuid.uuid4().hex[:8]}"
+        stop_recording_key = f"stop_recording_{uuid.uuid4().hex[:8]}"
+        transcribe_key = f"transcribe_{uuid.uuid4().hex[:8]}"
+        clear_text_key = f"clear_text_{uuid.uuid4().hex[:8]}"
+        
+        new_keys["start_recording"] = st.text_input("録音開始", shortcut_keys["start_recording"], key=start_recording_key)
+        new_keys["stop_recording"] = st.text_input("録音停止", shortcut_keys["stop_recording"], key=stop_recording_key)
+        new_keys["transcribe"] = st.text_input("文字起こし", shortcut_keys["transcribe"], key=transcribe_key)
+        new_keys["clear_text"] = st.text_input("テキストクリア", shortcut_keys["clear_text"], key=clear_text_key)
     
     with col2:
-        new_keys["save_recording"] = st.text_input("録音保存", shortcut_keys["save_recording"])
-        new_keys["open_settings"] = st.text_input("設定を開く", shortcut_keys["open_settings"])
-        new_keys["open_dictionary"] = st.text_input("辞書を開く", shortcut_keys["open_dictionary"])
-        new_keys["open_commands"] = st.text_input("コマンドを開く", shortcut_keys["open_commands"])
+        # text_inputのキーを一意にする
+        save_recording_key = f"save_recording_{uuid.uuid4().hex[:8]}"
+        open_settings_key = f"open_settings_{uuid.uuid4().hex[:8]}"
+        open_dictionary_key = f"open_dictionary_{uuid.uuid4().hex[:8]}"
+        open_commands_key = f"open_commands_{uuid.uuid4().hex[:8]}"
+        
+        new_keys["save_recording"] = st.text_input("録音保存", shortcut_keys["save_recording"], key=save_recording_key)
+        new_keys["open_settings"] = st.text_input("設定を開く", shortcut_keys["open_settings"], key=open_settings_key)
+        new_keys["open_dictionary"] = st.text_input("辞書を開く", shortcut_keys["open_dictionary"], key=open_dictionary_key)
+        new_keys["open_commands"] = st.text_input("コマンドを開く", shortcut_keys["open_commands"], key=open_commands_key)
     
     settings["shortcuts"]["keys"] = new_keys
 
@@ -305,12 +346,20 @@ def render_user_dictionary_tab() -> None:
         col1, col2 = st.columns(2)
         
         with col1:
-            category = st.text_input("カテゴリ", "カスタム")
-            term = st.text_input("用語")
+            # text_inputのキーを一意にする
+            category_key = f"category_{uuid.uuid4().hex[:8]}"
+            term_key = f"term_{uuid.uuid4().hex[:8]}"
+            
+            category = st.text_input("カテゴリ", "カスタム", key=category_key)
+            term = st.text_input("用語", key=term_key)
         
         with col2:
-            definition = st.text_area("定義")
-            pronunciation = st.text_input("発音（オプション）")
+            # text_areaとtext_inputのキーを一意にする
+            definition_key = f"definition_{uuid.uuid4().hex[:8]}"
+            pronunciation_key = f"pronunciation_{uuid.uuid4().hex[:8]}"
+            
+            definition = st.text_area("定義", key=definition_key)
+            pronunciation = st.text_input("発音（オプション）", key=pronunciation_key)
         
         # 追加ボタンのキーを一意にする
         add_dictionary_entry_key = f"add_dictionary_entry_{uuid.uuid4().hex[:8]}"
@@ -379,17 +428,24 @@ def render_commands_tab() -> None:
         col1, col2 = st.columns(2)
         
         with col1:
-            name = st.text_input("コマンド名")
-            description = st.text_input("説明")
+            # text_inputのキーを一意にする
+            name_key = f"name_{uuid.uuid4().hex[:8]}"
+            description_key = f"description_{uuid.uuid4().hex[:8]}"
+            
+            name = st.text_input("コマンド名", key=name_key)
+            description = st.text_input("説明", key=description_key)
         
         with col2:
             # 出力形式のキーを一意にする
             command_output_format_key = f"command_output_format_{uuid.uuid4().hex[:8]}"
+            enabled_key = f"enabled_{uuid.uuid4().hex[:8]}"
             
             output_format = st.selectbox("出力形式", ["text", "bullet_points", "summary", "text_file"], key=command_output_format_key)
-            enabled = st.checkbox("有効化", True)
+            enabled = st.checkbox("有効化", True, key=enabled_key)
         
-        llm_prompt = st.text_area("LLMプロンプト", placeholder="以下の文字起こし結果を処理してください：\n\n{text}")
+        # text_areaのキーを一意にする
+        llm_prompt_key = f"llm_prompt_{uuid.uuid4().hex[:8]}"
+        llm_prompt = st.text_area("LLMプロンプト", placeholder="以下の文字起こし結果を処理してください：\n\n{text}", key=llm_prompt_key)
         
         # 追加ボタンのキーを一意にする
         add_command_key = f"add_command_{uuid.uuid4().hex[:8]}"
@@ -579,8 +635,12 @@ def render_task_management_tab():
         add_task_due_date_key = f"add_task_due_date_{uuid.uuid4().hex[:8]}"
         
         with st.form("add_task_form"):
-            title = st.text_input("タイトル *")
-            description = st.text_area("説明")
+            # text_inputとtext_areaのキーを一意にする
+            title_key = f"title_{uuid.uuid4().hex[:8]}"
+            description_key = f"description_{uuid.uuid4().hex[:8]}"
+            
+            title = st.text_input("タイトル *", key=title_key)
+            description = st.text_area("説明", key=description_key)
             
             col1, col2, col3 = st.columns(3)
             with col1:
@@ -683,8 +743,12 @@ def render_calendar_management_tab():
         add_event_all_day_key = f"add_event_all_day_{uuid.uuid4().hex[:8]}"
         
         with st.form("add_event_form"):
-            title = st.text_input("タイトル *")
-            description = st.text_area("説明")
+            # text_inputとtext_areaのキーを一意にする
+            title_key = f"title_{uuid.uuid4().hex[:8]}"
+            description_key = f"description_{uuid.uuid4().hex[:8]}"
+            
+            title = st.text_input("タイトル *", key=title_key)
+            description = st.text_area("説明", key=description_key)
             
             col1, col2, col3 = st.columns(3)
             with col1:
