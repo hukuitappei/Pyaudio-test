@@ -105,6 +105,16 @@ class AudioRecorderApp:
             st.session_state.google_authenticated = False
         if 'current_page' not in st.session_state:
             st.session_state.current_page = "メイン"
+        
+        # Google認証関連のセッション状態初期化
+        if 'google_auth_url' not in st.session_state:
+            st.session_state.google_auth_url = None
+        if 'google_auth_flow' not in st.session_state:
+            st.session_state.google_auth_flow = None
+        if 'google_auth_key' not in st.session_state:
+            st.session_state.google_auth_key = None
+        if 'google_credentials' not in st.session_state:
+            st.session_state.google_credentials = None
     
     def setup_openai(self) -> Optional[openai.OpenAI]:
         """OpenAI APIの設定"""

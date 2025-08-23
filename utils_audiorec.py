@@ -854,10 +854,17 @@ class GoogleCalendarManager:
             st.session_state.google_auth_flow = None
         if 'google_credentials' not in st.session_state:
             st.session_state.google_credentials = None
+        if 'google_auth_url' not in st.session_state:
+            st.session_state.google_auth_url = None
+        if 'google_auth_key' not in st.session_state:
+            st.session_state.google_auth_key = None
     
     def authenticate(self) -> bool:
         """Google認証を実行（Streamlit対応）"""
         try:
+            # セッション状態の初期化
+            self._initialize_session_state()
+            
             # セッション状態から認証情報を復元
             if st.session_state.google_credentials:
                 self.credentials = st.session_state.google_credentials
@@ -945,6 +952,9 @@ class GoogleCalendarManager:
     def _handle_initial_auth(self, client_id: str, client_secret: str) -> Optional[Credentials]:
         """初回認証の処理（Streamlit対応）"""
         st.warning("⚠️ 初回認証が必要です。以下の手順に従ってください：")
+        
+        # セッション状態の初期化
+        self._initialize_session_state()
         
         # セッション状態で認証フローを管理
         if 'google_auth_flow' not in st.session_state:
