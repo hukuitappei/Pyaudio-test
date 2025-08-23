@@ -651,7 +651,7 @@ def main():
     # 設定の検証
     if CONFIG_AVAILABLE:
         try:
-            from config_manager import validate_secrets, show_environment_info
+            from config.config_manager import validate_secrets, show_environment_info
             if not validate_secrets():
                 st.warning("設定に問題がありますが、アプリケーションは続行します")
             show_environment_info()
