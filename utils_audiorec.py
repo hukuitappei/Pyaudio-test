@@ -6,22 +6,47 @@ app_audiorec.py用の統合ユーティリティクラス
 # 標準ライブラリ
 import json
 import os
-import pickle
-import tempfile
+import sys
 import uuid
-import wave
 from datetime import datetime, date, timedelta
-from typing import Dict, List, Optional, Any, Union
+from typing import Dict, Any, List, Optional, Tuple
 
 # サードパーティライブラリ
-import numpy as np
-import openai
 import streamlit as st
-from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import Flow
-from google.auth.transport.requests import Request
-from googleapiclient.discovery import build
-from googleapiclient.errors import HttpError
+import numpy as np
+
+# PyAudioの代替実装
+try:
+    import pyaudio
+    PYAUDIO_AVAILABLE = True
+except ImportError:
+    PYAUDIO_AVAILABLE = False
+    # Streamlit Cloud環境でのフォールバック
+    class PyAudio:
+        def __init__(self):
+            pass
+        def get_device_count(self):
+            return 0
+        def get_device_info_by_index(self, index):
+            return {'name': f'Device {index}', 'maxInputChannels': 1, 'defaultSampleRate': 44100}
+        def open(self, *args, **kwargs):
+            raise RuntimeError("PyAudio is not available in this environment")
+    
+    pyaudio = PyAudio()
+
+# 音声処理ライブラリ
+try:
+    import soundfile as sf
+    SOUNDFILE_AVAILABLE = True
+except ImportError:
+    SOUNDFILE_AVAILABLE = False
+
+try:
+    import librosa
+    LIBROSA_AVAILABLE = True
+except ImportError:
+    LIBROSA_AVAILABLE = False
+
 
 # ローカルインポート
 try:
@@ -355,63 +380,76 @@ class CommandManager:
 
 
 class DeviceManager:
-    """デバイス管理クラス（簡易版）"""
+    """デバイス管理クラス"""
     
     def __init__(self) -> None:
-        self.devices = self.get_available_devices()
+        self.pa = pyaudio.PyAudio()
     
     def get_available_devices(self) -> List[Dict[str, Any]]:
-        """利用可能なデバイスを取得（簡易版）"""
+        """利用可能な録音デバイスを取得"""
+        devices = []
+        
+        if not PYAUDIO_AVAILABLE:
+            # Streamlit Cloud環境でのフォールバック
+            devices.append({
+                'index': 0,
+                'name': 'Streamlit Cloud Audio (Simulated)',
+                'channels': 1,
+                'sample_rate': 44100,
+                'max_input_channels': 1
+            })
+            return devices
+        
         try:
-            # pyaudioが利用可能な場合は実際のデバイスを検出
-            import pyaudio
-            p = pyaudio.PyAudio()
-            devices = []
-            
-            for i in range(p.get_device_count()):
+            device_count = self.pa.get_device_count()
+            for i in range(device_count):
                 try:
-                    device_info = p.get_device_info_by_index(i)
-                    if device_info['maxInputChannels'] > 0:  # 入力デバイスのみ
+                    device_info = self.pa.get_device_info_by_index(i)
+                    if device_info['maxInputChannels'] > 0:
                         devices.append({
-                            "index": i,
-                            "name": device_info['name'],
-                            "channels": device_info['maxInputChannels'],
-                            "sample_rate": int(device_info['defaultSampleRate'])
+                            'index': i,
+                            'name': device_info['name'],
+                            'channels': device_info['maxInputChannels'],
+                            'sample_rate': int(device_info['defaultSampleRate']),
+                            'max_input_channels': device_info['maxInputChannels']
                         })
-                except Exception:
+                except Exception as e:
+                    st.warning(f"デバイス {i} の情報取得に失敗: {e}")
                     continue
-            
-            p.terminate()
-            return devices if devices else self._get_default_devices()
-            
-        except ImportError:
-            # pyaudioが利用できない場合はデフォルトデバイスを返す
-            return self._get_default_devices()
-        except Exception:
-            # その他のエラーの場合もデフォルトデバイスを返す
-            return self._get_default_devices()
-    
-    def _get_default_devices(self) -> List[Dict[str, Any]]:
-        """デフォルトデバイスリストを返す"""
-        return [
-            {"index": 0, "name": "デフォルトマイク", "channels": 1, "sample_rate": 44100},
-            {"index": 1, "name": "ヘッドセット マイク", "channels": 1, "sample_rate": 44100},
-            {"index": 2, "name": "内蔵マイク", "channels": 1, "sample_rate": 44100}
-        ]
+        except Exception as e:
+            st.error(f"デバイス情報の取得に失敗: {e}")
+        
+        return devices
     
     def get_device_by_index(self, index: int) -> Optional[Dict[str, Any]]:
-        """インデックスでデバイスを取得"""
-        for device in self.devices:
-            if device["index"] == index:
+        """指定されたインデックスのデバイス情報を取得"""
+        devices = self.get_available_devices()
+        for device in devices:
+            if device['index'] == index:
                 return device
         return None
     
-    def get_device_by_name(self, name: str) -> Optional[Dict[str, Any]]:
-        """名前でデバイスを取得"""
-        for device in self.devices:
-            if device["name"] == name:
-                return device
-        return None
+    def test_device(self, device_index: int) -> bool:
+        """デバイスのテスト"""
+        if not PYAUDIO_AVAILABLE:
+            st.info("Streamlit Cloud環境ではデバイステストは利用できません")
+            return True
+        
+        try:
+            device_info = self.pa.get_device_info_by_index(device_index)
+            st.success(f"デバイステスト成功: {device_info['name']}")
+            return True
+        except Exception as e:
+            st.error(f"デバイステスト失敗: {e}")
+            return False
+    
+    def __del__(self):
+        """デストラクタ"""
+        if PYAUDIO_AVAILABLE:
+            try:
+                self.pa.terminate()
+            except:
+                pass
 
 
 class TaskManager:
@@ -1199,17 +1237,77 @@ def get_google_auth_manager() -> GoogleAuthManager:
     return _google_auth_manager
 
 
-def save_audio_file(audio_data: bytes, filename: str) -> bool:
-    """音声ファイルを保存"""
+def record_audio(duration: int = 5, sample_rate: int = 44100, channels: int = 1) -> Optional[np.ndarray]:
+    """音声録音機能（Streamlit Cloud対応）"""
+    
+    if not PYAUDIO_AVAILABLE:
+        st.warning("Streamlit Cloud環境では直接録音は利用できません")
+        st.info("代わりにstreamlit-audiorecコンポーネントを使用してください")
+        return None
+    
     try:
-        os.makedirs("recordings", exist_ok=True)
-        filepath = os.path.join("recordings", filename)
-        with open(filepath, "wb") as f:
-            f.write(audio_data)
-        return True
+        p = pyaudio.PyAudio()
+        
+        # 録音ストリームを開く
+        stream = p.open(
+            format=pyaudio.paInt16,
+            channels=channels,
+            rate=sample_rate,
+            input=True,
+            frames_per_buffer=1024
+        )
+        
+        st.info(f"録音を開始します（{duration}秒間）...")
+        
+        frames = []
+        for i in range(0, int(sample_rate / 1024 * duration)):
+            data = stream.read(1024)
+            frames.append(data)
+        
+        st.success("録音が完了しました！")
+        
+        # ストリームを閉じる
+        stream.stop_stream()
+        stream.close()
+        p.terminate()
+        
+        # データを結合してnumpy配列に変換
+        audio_data = b''.join(frames)
+        audio_array = np.frombuffer(audio_data, dtype=np.int16)
+        
+        return audio_array
+        
     except Exception as e:
-        st.error(f"ファイル保存エラー: {e}")
+        st.error(f"録音エラー: {e}")
+        return None
+
+def save_audio_file(audio_data: np.ndarray, filename: str, sample_rate: int = 44100) -> bool:
+    """音声ファイルを保存"""
+    
+    if SOUNDFILE_AVAILABLE:
+        try:
+            sf.write(filename, audio_data, sample_rate)
+            return True
+        except Exception as e:
+            st.error(f"音声ファイル保存エラー: {e}")
+            return False
+    else:
+        st.warning("soundfileライブラリが利用できません")
         return False
+
+def load_audio_file(filename: str) -> Optional[Tuple[np.ndarray, int]]:
+    """音声ファイルを読み込み"""
+    
+    if SOUNDFILE_AVAILABLE:
+        try:
+            audio_data, sample_rate = sf.read(filename)
+            return audio_data, sample_rate
+        except Exception as e:
+            st.error(f"音声ファイル読み込みエラー: {e}")
+            return None
+    else:
+        st.warning("soundfileライブラリが利用できません")
+        return None
 
 
 def save_transcription_file(transcription_text: str, filename: str) -> bool:

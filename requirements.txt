@@ -7,4 +7,6 @@ google-auth>=2.23.0
 google-auth-oauthlib>=1.0.0
 google-auth-httplib2>=0.1.0
 google-api-python-client>=2.100.0
-pyaudio>=0.2.11
+# pyaudio>=0.2.11  # Streamlit Cloud環境では使用不可
+soundfile>=0.12.1
+librosa>=0.10.0

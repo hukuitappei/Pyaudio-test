@@ -33,7 +33,8 @@ try:
         CalendarManager,
         TaskAnalyzer,
         EventAnalyzer,
-        GoogleCalendarManager
+        GoogleCalendarManager,
+        PYAUDIO_AVAILABLE
     )
     UTILS_AVAILABLE = True
     st.success("拡張機能が正常に読み込まれました")
@@ -41,10 +42,12 @@ except ImportError as e:
     st.error(f"utils_audiorec のインポートに失敗しました: {e}")
     st.info("基本機能のみで動作します")
     UTILS_AVAILABLE = False
+    PYAUDIO_AVAILABLE = False
 except Exception as e:
     st.error(f"予期しないエラーが発生しました: {e}")
     st.info("基本機能のみで動作します")
     UTILS_AVAILABLE = False
+    PYAUDIO_AVAILABLE = False
 
 try:
     from settings_ui_audiorec import SettingsUI
@@ -160,7 +163,7 @@ class AudioRecorderApp:
             st.error(f"OpenAI APIの初期化に失敗しました: {e}")
             return None
     
-    def transcribe_audio(self, audio_data: bytes, client: openai.OpenAI) -> Optional[str]:
+    def transcribe_audio(self, client: openai.OpenAI, audio_data: bytes) -> Optional[str]:
         """音声を文字起こし"""
         if not audio_data:
             return None
@@ -481,8 +484,17 @@ class AudioRecorderApp:
         if not client:
             return
         
+        # 環境情報の表示
+        if not PYAUDIO_AVAILABLE:
+            st.info("📝 **環境情報**: Streamlit Cloud環境では直接録音は利用できません")
+            st.info("💡 **代替案**: streamlit-audiorecコンポーネントを使用してください")
+        else:
+            st.success("✅ **環境情報**: ローカル環境で録音機能が利用可能です")
+        
         # 音声録音
         st.subheader("🎤 音声録音")
+        
+        # streamlit-audiorecコンポーネントを使用
         audio_data = st_audiorec()
         
         if audio_data is not None:
@@ -504,17 +516,21 @@ class AudioRecorderApp:
             
             with col2:
                 # 文字起こし実行
-                if st.button("🔄 文字起こし実行", type="primary", key="transcribe_main"):
+                if st.button("🎯 文字起こし実行", key="transcribe_main", type="primary"):
                     with st.spinner("文字起こし中..."):
-                        transcription = self.transcribe_audio(audio_data, client)
+                        transcription = self.transcribe_audio(client, audio_data)
                         if transcription:
                             st.session_state.transcription = transcription
-                            st.success("文字起こしが完了しました！")
+                            st.session_state.transcription_timestamp = timestamp
+                            self.display_transcription_results(transcription, timestamp)
+                            self.display_analysis_results(transcription)
         
-        # 文字起こし結果表示
-        if st.session_state.transcription:
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            self.display_transcription_results(st.session_state.transcription, timestamp)
+        # 既存の文字起こし結果の表示
+        if 'transcription' in st.session_state and st.session_state.transcription:
+            self.display_transcription_results(
+                st.session_state.transcription, 
+                st.session_state.transcription_timestamp
+            )
             self.display_analysis_results(st.session_state.transcription)
     
     def run(self):
