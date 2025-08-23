@@ -24,7 +24,25 @@ import numpy as np
 import openai
 import streamlit as st
 from dotenv import load_dotenv
-from st_audiorec import st_audiorec
+
+# st_audiorecのインポート（エラーハンドリング付き）
+try:
+    from st_audiorec import st_audiorec
+    ST_AUDIOREC_AVAILABLE = True
+except ImportError as e:
+    st.warning(f"st_audiorec のインポートに失敗しました: {e}")
+    ST_AUDIOREC_AVAILABLE = False
+    # フォールバック用のダミー関数
+    def st_audiorec(*args, **kwargs):
+        st.error("音声録音機能が利用できません")
+        return None
+except Exception as e:
+    st.warning(f"st_audiorec で予期しないエラーが発生しました: {e}")
+    ST_AUDIOREC_AVAILABLE = False
+    # フォールバック用のダミー関数
+    def st_audiorec(*args, **kwargs):
+        st.error("音声録音機能が利用できません")
+        return None
 
 # 拡張機能のインポート
 try:
@@ -75,6 +93,20 @@ except ImportError as e:
 except Exception as e:
     st.warning(f"config_manager で予期しないエラーが発生しました: {e}")
     CONFIG_AVAILABLE = False
+
+# 設定確認機能の追加
+if CONFIG_AVAILABLE:
+    try:
+        from config.config_manager import show_google_credentials_status, show_environment_info
+        CONFIG_UI_AVAILABLE = True
+    except ImportError as e:
+        st.warning(f"設定確認機能のインポートに失敗しました: {e}")
+        CONFIG_UI_AVAILABLE = False
+    except Exception as e:
+        st.warning(f"設定確認機能で予期しないエラーが発生しました: {e}")
+        CONFIG_UI_AVAILABLE = False
+else:
+    CONFIG_UI_AVAILABLE = False
 
 # 環境変数の読み込み
 load_dotenv()
@@ -531,8 +563,18 @@ class AudioRecorderApp:
         # 音声録音
         st.subheader("🎤 音声録音")
         
-        # streamlit-audiorecコンポーネントを使用
-        audio_data = st_audiorec()
+        # streamlit-audiorecコンポーネントを使用（エラーハンドリング付き）
+        if ST_AUDIOREC_AVAILABLE:
+            try:
+                audio_data = st_audiorec()
+            except Exception as e:
+                st.error(f"音声録音コンポーネントでエラーが発生しました: {e}")
+                st.info("音声録音機能を再読み込みしてください")
+                audio_data = None
+        else:
+            st.error("音声録音機能が利用できません")
+            st.info("streamlit-audiorecライブラリの読み込みに失敗しました")
+            audio_data = None
         
         if audio_data is not None:
             st.session_state.audio_data = audio_data
@@ -655,9 +697,7 @@ def main():
     # 設定の検証
     if CONFIG_AVAILABLE:
         try:
-            from config.config_manager import validate_secrets, show_environment_info
-            if not validate_secrets():
-                st.warning("設定に問題がありますが、アプリケーションは続行します")
+            from config.config_manager import show_environment_info
             show_environment_info()
         except Exception as e:
             st.warning(f"設定検証エラー: {e}")

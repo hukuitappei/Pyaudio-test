@@ -86,6 +86,84 @@ def get_google_credentials() -> tuple[Optional[str], Optional[str], Optional[str
     return client_id, client_secret, refresh_token
 
 
+def check_google_credentials() -> dict:
+    """
+    Google認証情報の設定状況を確認
+    
+    Returns:
+        設定状況を示す辞書
+    """
+    client_id, client_secret, refresh_token = get_google_credentials()
+    
+    status = {
+        'client_id': {
+            'exists': bool(client_id),
+            'value': client_id[:10] + '...' if client_id and len(client_id) > 10 else client_id
+        },
+        'client_secret': {
+            'exists': bool(client_secret),
+            'value': client_secret[:10] + '...' if client_secret and len(client_secret) > 10 else client_secret
+        },
+        'refresh_token': {
+            'exists': bool(refresh_token),
+            'value': refresh_token[:10] + '...' if refresh_token and len(refresh_token) > 10 else refresh_token
+        },
+        'all_required': bool(client_id and client_secret),
+        'ready_for_auth': bool(client_id and client_secret and refresh_token)
+    }
+    
+    return status
+
+
+def show_google_credentials_status() -> None:
+    """
+    Google認証情報の設定状況を表示
+    """
+    status = check_google_credentials()
+    
+    st.subheader("🔐 Google認証情報の設定状況")
+    
+    # 各設定項目の状況を表示
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        if status['client_id']['exists']:
+            st.success("✅ GOOGLE_CLIENT_ID")
+            st.caption(f"設定済み: {status['client_id']['value']}")
+        else:
+            st.error("❌ GOOGLE_CLIENT_ID")
+            st.caption("未設定")
+    
+    with col2:
+        if status['client_secret']['exists']:
+            st.success("✅ GOOGLE_CLIENT_SECRET")
+            st.caption(f"設定済み: {status['client_secret']['value']}")
+        else:
+            st.error("❌ GOOGLE_CLIENT_SECRET")
+            st.caption("未設定")
+    
+    with col3:
+        if status['refresh_token']['exists']:
+            st.success("✅ GOOGLE_REFRESH_TOKEN")
+            st.caption(f"設定済み: {status['refresh_token']['value']}")
+        else:
+            st.warning("⚠️ GOOGLE_REFRESH_TOKEN")
+            st.caption("未設定（初回認証が必要）")
+    
+    # 全体状況の表示
+    st.markdown("---")
+    
+    if status['all_required']:
+        if status['ready_for_auth']:
+            st.success("🎉 すべての認証情報が設定されています！")
+        else:
+            st.warning("⚠️ 基本認証情報は設定済みですが、リフレッシュトークンが未設定です")
+            st.info("初回認証を実行してリフレッシュトークンを取得してください")
+    else:
+        st.error("❌ 必要な認証情報が不足しています")
+        st.info("Google Cloud ConsoleでOAuth 2.0クライアントIDを作成し、設定してください")
+
+
 def get_openai_api_key() -> Optional[str]:
     """
     OpenAI APIキーを取得
@@ -98,29 +176,48 @@ def get_openai_api_key() -> Optional[str]:
 
 def show_environment_info() -> None:
     """
-    現在の環境情報を表示（デバッグ用）
+    環境情報を表示
     """
-    st.sidebar.write("### 🔧 環境情報")
+    st.subheader("🌍 環境情報")
     
+    # Streamlit Cloud判定
     is_cloud = is_streamlit_cloud()
-    st.sidebar.write(f"**環境**: {'☁️ Streamlit Cloud' if is_cloud else '💻 ローカル'}")
+    if is_cloud:
+        st.success("✅ Streamlit Cloud環境")
+    else:
+        st.info("💻 ローカル環境")
     
-    # 設定値の確認（機密情報は一部マスク）
+    # 主要な環境変数の確認
+    st.markdown("### 設定状況")
+    
+    # Google認証情報の状況を表示
+    show_google_credentials_status()
+    
+    # OpenAI APIキーの状況
     openai_key = get_openai_api_key()
-    google_client_id = get_secret('GOOGLE_CLIENT_ID')
+    if openai_key:
+        st.success("✅ OPENAI_API_KEY: 設定済み")
+    else:
+        st.error("❌ OPENAI_API_KEY: 未設定")
+
+
+def get_debug_info() -> dict:
+    """
+    デバッグ情報を取得
     
-    st.sidebar.write("**設定状況**:")
-    st.sidebar.write(f"OpenAI API: {'✅ 設定済み' if openai_key else '❌ 未設定'}")
-    st.sidebar.write(f"Google Client ID: {'✅ 設定済み' if google_client_id else '❌ 未設定'}")
-    
-    # Streamlit Secretsの利用状況
-    try:
-        if hasattr(st, 'secrets') and st.secrets is not None:
-            st.sidebar.write("**Secrets**: ✅ 利用可能")
-        else:
-            st.sidebar.write("**Secrets**: ❌ 利用不可")
-    except Exception:
-        st.sidebar.write("**Secrets**: ❌ エラー")
+    Returns:
+        デバッグ情報の辞書
+    """
+    return {
+        'is_streamlit_cloud': is_streamlit_cloud(),
+        'google_credentials': check_google_credentials(),
+        'openai_api_key': bool(get_openai_api_key()),
+        'environment_vars': {
+            'STREAMLIT_SHARING': os.getenv('STREAMLIT_SHARING'),
+            'STREAMLIT_CLOUD': os.getenv('STREAMLIT_CLOUD'),
+            'HOSTNAME': os.getenv('HOSTNAME')
+        }
+    }
 
 
 def validate_secrets() -> bool:
