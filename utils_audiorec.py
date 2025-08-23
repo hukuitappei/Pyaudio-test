@@ -441,20 +441,29 @@ class DeviceManager:
     """デバイス管理クラス"""
     
     def __init__(self) -> None:
-        self.pa = pyaudio.PyAudio()
+        # PyAudioの初期化を条件付きで実行
+        if PYAUDIO_AVAILABLE:
+            try:
+                self.pa = pyaudio.PyAudio()
+            except Exception as e:
+                st.warning(f"PyAudioの初期化に失敗しました: {e}")
+                self.pa = None
+        else:
+            self.pa = None
     
     def get_available_devices(self) -> List[Dict[str, Any]]:
         """利用可能な録音デバイスを取得"""
         devices = []
         
-        if not PYAUDIO_AVAILABLE:
+        if not PYAUDIO_AVAILABLE or self.pa is None:
             # Streamlit Cloud環境でのフォールバック
             devices.append({
                 'index': 0,
-                'name': 'Streamlit Cloud Audio (Simulated)',
+                'name': 'Streamlit Cloud Audio (streamlit-audiorec)',
                 'channels': 1,
                 'sample_rate': 44100,
-                'max_input_channels': 1
+                'max_input_channels': 1,
+                'description': 'streamlit-audiorecコンポーネントを使用'
             })
             return devices
         
@@ -487,10 +496,34 @@ class DeviceManager:
                 return device
         return None
     
+    def get_current_device_info(self) -> Optional[Dict[str, Any]]:
+        """現在のデバイス情報を取得"""
+        if not PYAUDIO_AVAILABLE or self.pa is None:
+            return {
+                'name': 'Streamlit Cloud Audio (streamlit-audiorec)',
+                'channels': 1,
+                'sample_rate': 44100,
+                'description': 'streamlit-audiorecコンポーネントを使用'
+            }
+        
+        try:
+            # デフォルトデバイスの情報を取得
+            default_device = self.pa.get_default_input_device_info()
+            return {
+                'name': default_device['name'],
+                'channels': default_device['maxInputChannels'],
+                'sample_rate': int(default_device['defaultSampleRate']),
+                'description': 'ローカル環境のデフォルトデバイス'
+            }
+        except Exception as e:
+            st.warning(f"デフォルトデバイス情報の取得に失敗: {e}")
+            return None
+    
     def test_device(self, device_index: int) -> bool:
         """デバイスのテスト"""
-        if not PYAUDIO_AVAILABLE:
+        if not PYAUDIO_AVAILABLE or self.pa is None:
             st.info("Streamlit Cloud環境ではデバイステストは利用できません")
+            st.info("💡 streamlit-audiorecコンポーネントを使用してください")
             return True
         
         try:
@@ -503,7 +536,7 @@ class DeviceManager:
     
     def __del__(self):
         """デストラクタ"""
-        if PYAUDIO_AVAILABLE:
+        if PYAUDIO_AVAILABLE and self.pa is not None:
             try:
                 self.pa.terminate()
             except:

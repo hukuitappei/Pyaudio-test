@@ -409,6 +409,11 @@ class AudioRecorderApp:
                 if device_info:
                     st.subheader("🎤 デバイス情報")
                     st.write(f"デバイス: {device_info.get('name', 'Unknown')}")
+                    if device_info.get('description'):
+                        st.write(f"説明: {device_info.get('description')}")
+            else:
+                st.subheader("🎤 デバイス情報")
+                st.write("デバイス情報が取得できません")
     
     def main_page(self):
         """メインページ（タブ形式）"""
@@ -508,8 +513,10 @@ class AudioRecorderApp:
         if not PYAUDIO_AVAILABLE:
             st.info("📝 **録音環境**: Streamlit Cloud環境では直接録音は利用できません")
             st.info("💡 **録音代替案**: streamlit-audiorecコンポーネントを使用してください")
+            st.info("🎤 **現在の録音方法**: 下の録音ボタンで音声を録音できます")
         else:
             st.success("✅ **録音環境**: ローカル環境で録音機能が利用可能です")
+            st.info("🎤 **録音方法**: 下の録音ボタンまたはstreamlit-audiorecコンポーネントを使用")
         
         if not OPENAI_AVAILABLE:
             st.warning("⚠️ **AI環境**: OpenAI APIが利用できません")
