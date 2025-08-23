@@ -641,7 +641,7 @@ def main():
     # 音声処理ライブラリの状況表示
     if UTILS_AVAILABLE:
         try:
-            from utils_audiorec import show_audio_library_status
+            from src.utils_audiorec import show_audio_library_status
             show_audio_library_status()
         except Exception as e:
             st.sidebar.warning(f"音声処理ライブラリ状況の表示エラー: {e}")
