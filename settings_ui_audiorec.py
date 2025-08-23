@@ -21,9 +21,11 @@ try:
         GoogleCalendarManager, DeviceManager, get_google_auth_manager
     )
     UTILS_AUDIOREC_AVAILABLE = True
-except ImportError:
+except ImportError as e:
     # Streamlit Cloud環境でのフォールバック
     UTILS_AUDIOREC_AVAILABLE = False
+    st.warning(f"utils_audiorec のインポートに失敗しました: {e}")
+    
     # ダミークラスを定義
     class EnhancedSettingsManager:
         def __init__(self):
@@ -44,6 +46,9 @@ except ImportError:
     class TaskManager:
         def __init__(self):
             pass
+        
+        def get_all_tasks(self):
+            return []
     
     class CalendarManager:
         def __init__(self):
@@ -948,105 +953,154 @@ def render_calendar_sync_tab(auth_manager):
         st.info("イベントがありません")
 
 
+def render_history_tab():
+    """履歴タブ"""
+    st.subheader("📜 履歴")
+    st.write("文字起こし履歴機能は開発中です。")
+    
+    # 履歴ファイル一覧
+    transcriptions_dir = "transcriptions"
+    if os.path.exists(transcriptions_dir):
+        files = [f for f in os.listdir(transcriptions_dir) if f.endswith('.txt')]
+        if files:
+            st.subheader("📝 文字起こし履歴")
+            for file in sorted(files, reverse=True):
+                with st.expander(f"📄 {file}"):
+                    filepath = os.path.join(transcriptions_dir, file)
+                    try:
+                        with open(filepath, 'r', encoding='utf-8') as f:
+                            content = f.read()
+                        # text_areaのキーを一意にする
+                        text_area_key = f"history_{file}_{uuid.uuid4().hex[:8]}"
+                        st.text_area("内容", content, height=200, key=text_area_key)
+                    except Exception as e:
+                        st.error(f"ファイル読み込みエラー: {e}")
+        else:
+            st.info("まだ文字起こし履歴がありません。")
+    else:
+        st.info("履歴フォルダが見つかりません。")
+
+def render_statistics_tab():
+    """統計タブ"""
+    st.subheader("📊 統計")
+    st.write("統計機能は開発中です。")
+    
+    # 基本的な統計情報
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.metric("📝 文字起こし回数", _get_transcription_count())
+    
+    with col2:
+        st.metric("🎵 録音ファイル数", _get_recording_count())
+    
+    with col3:
+        st.metric("📋 タスク数", _get_task_count())
+
+def _get_transcription_count() -> int:
+    """文字起こし回数を取得"""
+    transcriptions_dir = "transcriptions"
+    if os.path.exists(transcriptions_dir):
+        return len([f for f in os.listdir(transcriptions_dir) if f.endswith('.txt')])
+    return 0
+
+def _get_recording_count() -> int:
+    """録音ファイル数を取得"""
+    recordings_dir = "recordings"
+    if os.path.exists(recordings_dir):
+        return len([f for f in os.listdir(recordings_dir) if f.endswith(('.wav', '.mp3', '.m4a'))])
+    return 0
+
+def _get_task_count() -> int:
+    """タスク数を取得"""
+    try:
+        if UTILS_AUDIOREC_AVAILABLE:
+            task_manager = TaskManager()
+            tasks = task_manager.get_all_tasks()
+            return len(tasks)
+    except:
+        pass
+    return 0
+
 class SettingsUI:
     """設定UI統合クラス"""
     
     def __init__(self):
-        self.settings_manager = EnhancedSettingsManager()
-        self.user_dict_manager = UserDictionaryManager()
-        self.command_manager = CommandManager()
-        self.device_manager = DeviceManager()
-        self.task_manager = TaskManager()
-        self.calendar_manager = CalendarManager()
-        self.task_analyzer = TaskAnalyzer()
-        self.event_analyzer = EventAnalyzer()
-        self.google_calendar = GoogleCalendarManager()
+        if UTILS_AUDIOREC_AVAILABLE:
+            self.settings_manager = EnhancedSettingsManager()
+            self.user_dict_manager = UserDictionaryManager()
+            self.command_manager = CommandManager()
+            self.device_manager = DeviceManager()
+            self.task_manager = TaskManager()
+            self.calendar_manager = CalendarManager()
+            self.task_analyzer = TaskAnalyzer()
+            self.event_analyzer = EventAnalyzer()
+            self.google_calendar = GoogleCalendarManager()
+        else:
+            # フォールバック用のダミーインスタンス
+            self.settings_manager = EnhancedSettingsManager()
+            self.user_dict_manager = UserDictionaryManager()
+            self.command_manager = CommandManager()
+            self.device_manager = DeviceManager()
+            self.task_manager = TaskManager()
+            self.calendar_manager = CalendarManager()
+            self.task_analyzer = TaskAnalyzer()
+            self.event_analyzer = EventAnalyzer()
+            self.google_calendar = GoogleCalendarManager()
     
     def display_settings_page(self):
         """設定ページ表示"""
-        render_enhanced_settings_tab(self.settings_manager)
+        if UTILS_AUDIOREC_AVAILABLE:
+            render_enhanced_settings_tab(self.settings_manager)
+        else:
+            st.warning("設定機能は現在利用できません")
     
     def display_user_dictionary_page(self):
         """ユーザー辞書ページ表示"""
-        render_user_dictionary_tab()
+        if UTILS_AUDIOREC_AVAILABLE:
+            render_user_dictionary_tab()
+        else:
+            st.warning("ユーザー辞書機能は現在利用できません")
     
     def display_command_management_page(self):
         """コマンド管理ページ表示"""
-        render_commands_tab()
+        if UTILS_AUDIOREC_AVAILABLE:
+            render_commands_tab()
+        else:
+            st.warning("コマンド管理機能は現在利用できません")
     
     def display_device_management_page(self):
         """デバイス管理ページ表示"""
-        settings = self.settings_manager.load_settings()
-        render_device_settings_tab(settings, self.settings_manager)
+        if UTILS_AUDIOREC_AVAILABLE:
+            settings = self.settings_manager.load_settings()
+            render_device_settings_tab(settings, self.settings_manager)
+        else:
+            st.warning("デバイス管理機能は現在利用できません")
     
     def display_task_management_page(self):
         """タスク管理ページ表示"""
-        render_task_management_tab()
+        if UTILS_AUDIOREC_AVAILABLE:
+            render_task_management_tab()
+        else:
+            st.warning("タスク管理機能は現在利用できません")
     
     def display_calendar_page(self):
         """カレンダーページ表示"""
-        render_calendar_management_tab()
+        if UTILS_AUDIOREC_AVAILABLE:
+            render_calendar_management_tab()
+        else:
+            st.warning("カレンダー機能は現在利用できません")
     
     def display_history_page(self):
         """履歴ページ表示"""
-        st.write("文字起こし履歴機能は開発中です。")
-        
-        # 履歴ファイル一覧
-        transcriptions_dir = "transcriptions"
-        if os.path.exists(transcriptions_dir):
-            files = [f for f in os.listdir(transcriptions_dir) if f.endswith('.txt')]
-            if files:
-                st.subheader("📝 文字起こし履歴")
-                for file in sorted(files, reverse=True):
-                    with st.expander(f"📄 {file}"):
-                        filepath = os.path.join(transcriptions_dir, file)
-                        try:
-                            with open(filepath, 'r', encoding='utf-8') as f:
-                                content = f.read()
-                            # text_areaのキーを一意にする
-                            text_area_key = f"history_{file}_{uuid.uuid4().hex[:8]}"
-                            st.text_area("内容", content, height=200, key=text_area_key)
-                        except Exception as e:
-                            st.error(f"ファイル読み込みエラー: {e}")
-            else:
-                st.info("まだ文字起こし履歴がありません。")
+        if UTILS_AUDIOREC_AVAILABLE:
+            render_history_tab()
         else:
-            st.info("履歴フォルダが見つかりません。")
+            st.warning("履歴機能は現在利用できません")
     
     def display_statistics_page(self):
         """統計ページ表示"""
-        st.write("統計機能は開発中です。")
-        
-        # 基本的な統計情報
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            st.metric("📝 文字起こし回数", self._get_transcription_count())
-        
-        with col2:
-            st.metric("🎵 録音ファイル数", self._get_recording_count())
-        
-        with col3:
-            st.metric("📋 タスク数", self._get_task_count())
-    
-    def _get_transcription_count(self) -> int:
-        """文字起こし回数を取得"""
-        transcriptions_dir = "transcriptions"
-        if os.path.exists(transcriptions_dir):
-            return len([f for f in os.listdir(transcriptions_dir) if f.endswith('.txt')])
-        return 0
-    
-    def _get_recording_count(self) -> int:
-        """録音ファイル数を取得"""
-        recordings_dir = "recordings"
-        if os.path.exists(recordings_dir):
-            return len([f for f in os.listdir(recordings_dir) if f.endswith(('.wav', '.mp3', '.m4a'))])
-        return 0
-    
-    def _get_task_count(self) -> int:
-        """タスク数を取得"""
-        try:
-            tasks = self.task_manager.get_all_tasks()
-            return len(tasks)
-        except:
-            return 0 
+        if UTILS_AUDIOREC_AVAILABLE:
+            render_statistics_tab()
+        else:
+            st.warning("統計機能は現在利用できません") 

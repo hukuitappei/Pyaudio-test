@@ -34,7 +34,8 @@ try:
         TaskAnalyzer,
         EventAnalyzer,
         GoogleCalendarManager,
-        PYAUDIO_AVAILABLE
+        PYAUDIO_AVAILABLE,
+        OPENAI_AVAILABLE
     )
     UTILS_AVAILABLE = True
     st.success("拡張機能が正常に読み込まれました")
@@ -43,11 +44,13 @@ except ImportError as e:
     st.info("基本機能のみで動作します")
     UTILS_AVAILABLE = False
     PYAUDIO_AVAILABLE = False
+    OPENAI_AVAILABLE = False
 except Exception as e:
     st.error(f"予期しないエラーが発生しました: {e}")
     st.info("基本機能のみで動作します")
     UTILS_AVAILABLE = False
     PYAUDIO_AVAILABLE = False
+    OPENAI_AVAILABLE = False
 
 try:
     from settings_ui_audiorec import SettingsUI
@@ -133,27 +136,36 @@ class AudioRecorderApp:
     
     def setup_openai(self) -> Optional[openai.OpenAI]:
         """OpenAI APIの設定"""
+        if not OPENAI_AVAILABLE:
+            st.error("⚠️ OpenAIライブラリが利用できません")
+            return None
+        
+        # APIキーの取得
         api_key = None
         
-        # 1. config_managerを使用（推奨）
-        if CONFIG_AVAILABLE:
+        # 1. config_managerから取得を試行
+        try:
             api_key = get_secret("OPENAI_API_KEY")
+        except:
+            pass
         
-        # 2. フォールバック: st.secretsを直接使用
+        # 2. Streamlit Secretsから取得を試行
         if not api_key:
             try:
-                if hasattr(st, 'secrets') and st.secrets is not None:
-                    api_key = st.secrets.get("OPENAI_API_KEY")
-            except Exception as e:
-                st.warning(f"Streamlit Secretsの読み込みエラー: {e}")
+                api_key = st.secrets.get("OPENAI_API_KEY")
+            except:
+                pass
         
-        # 3. フォールバック: 環境変数
+        # 3. 環境変数から取得を試行
         if not api_key:
-            api_key = os.getenv("OPENAI_API_KEY")
+            try:
+                api_key = os.getenv("OPENAI_API_KEY")
+            except:
+                pass
         
         if not api_key:
             st.error("⚠️ OpenAI APIキーが設定されていません。")
-            st.info("📝 `.streamlit/secrets.toml`ファイルまたは環境変数で設定してください。")
+            st.info("設定タブでOpenAI APIキーを設定してください。")
             return None
         
         try:
@@ -427,6 +439,7 @@ class AudioRecorderApp:
                 self.settings_ui.display_settings_page()
             else:
                 st.error("設定UIが利用できません。")
+                st.info("💡 解決方法: settings_ui_audiorec.pyの読み込みに失敗しました。")
         
         # ユーザー辞書タブ
         with tabs[2]:
@@ -434,6 +447,7 @@ class AudioRecorderApp:
                 self.settings_ui.display_user_dictionary_page()
             else:
                 st.error("ユーザー辞書UIが利用できません。")
+                st.info("💡 解決方法: settings_ui_audiorec.pyの読み込みに失敗しました。")
         
         # コマンド管理タブ
         with tabs[3]:
@@ -441,6 +455,7 @@ class AudioRecorderApp:
                 self.settings_ui.display_command_management_page()
             else:
                 st.error("コマンド管理UIが利用できません。")
+                st.info("💡 解決方法: settings_ui_audiorec.pyの読み込みに失敗しました。")
         
         # デバイス管理タブ
         with tabs[4]:
@@ -448,6 +463,7 @@ class AudioRecorderApp:
                 self.settings_ui.display_device_management_page()
             else:
                 st.error("デバイス管理UIが利用できません。")
+                st.info("💡 解決方法: settings_ui_audiorec.pyの読み込みに失敗しました。")
         
         # タスク管理タブ
         with tabs[5]:
@@ -455,6 +471,7 @@ class AudioRecorderApp:
                 self.settings_ui.display_task_management_page()
             else:
                 st.error("タスク管理UIが利用できません。")
+                st.info("💡 解決方法: settings_ui_audiorec.pyの読み込みに失敗しました。")
         
         # カレンダータブ
         with tabs[6]:
@@ -462,6 +479,7 @@ class AudioRecorderApp:
                 self.settings_ui.display_calendar_page()
             else:
                 st.error("カレンダーUIが利用できません。")
+                st.info("💡 解決方法: settings_ui_audiorec.pyの読み込みに失敗しました。")
         
         # 履歴タブ
         with tabs[7]:
@@ -469,6 +487,7 @@ class AudioRecorderApp:
                 self.settings_ui.display_history_page()
             else:
                 st.error("履歴UIが利用できません。")
+                st.info("💡 解決方法: settings_ui_audiorec.pyの読み込みに失敗しました。")
         
         # 統計タブ
         with tabs[8]:
@@ -476,6 +495,7 @@ class AudioRecorderApp:
                 self.settings_ui.display_statistics_page()
             else:
                 st.error("統計UIが利用できません。")
+                st.info("💡 解決方法: settings_ui_audiorec.pyの読み込みに失敗しました。")
     
     def display_recording_tab(self):
         """録音・文字起こしタブの表示"""
@@ -486,10 +506,16 @@ class AudioRecorderApp:
         
         # 環境情報の表示
         if not PYAUDIO_AVAILABLE:
-            st.info("📝 **環境情報**: Streamlit Cloud環境では直接録音は利用できません")
-            st.info("💡 **代替案**: streamlit-audiorecコンポーネントを使用してください")
+            st.info("📝 **録音環境**: Streamlit Cloud環境では直接録音は利用できません")
+            st.info("💡 **録音代替案**: streamlit-audiorecコンポーネントを使用してください")
         else:
-            st.success("✅ **環境情報**: ローカル環境で録音機能が利用可能です")
+            st.success("✅ **録音環境**: ローカル環境で録音機能が利用可能です")
+        
+        if not OPENAI_AVAILABLE:
+            st.warning("⚠️ **AI環境**: OpenAI APIが利用できません")
+            st.info("💡 **AI代替案**: OpenAI APIキーを設定してください")
+        else:
+            st.success("✅ **AI環境**: OpenAI APIが利用可能です")
         
         # 音声録音
         st.subheader("🎤 音声録音")

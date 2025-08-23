@@ -15,6 +15,18 @@ from typing import Dict, Any, List, Optional, Tuple
 import streamlit as st
 import numpy as np
 
+# OpenAIライブラリ
+try:
+    import openai
+    OPENAI_AVAILABLE = True
+except ImportError:
+    OPENAI_AVAILABLE = False
+    # フォールバック用のダミークラス
+    class OpenAI:
+        def __init__(self, *args, **kwargs):
+            pass
+    openai = type('openai', (), {'OpenAI': OpenAI})()
+
 # PyAudioの代替実装
 try:
     import pyaudio
@@ -780,172 +792,99 @@ class ShortcutManager:
 class TaskAnalyzer:
     """タスク分析クラス"""
     
-    def __init__(self, openai_client: Optional[openai.OpenAI] = None) -> None:
+    def __init__(self, openai_client=None) -> None:
         self.openai_client = openai_client
     
-    def analyze_text_for_tasks(self, text: str) -> tuple[List[Dict[str, Any]], Optional[str]]:
+    def analyze_text(self, text: str) -> List[Dict[str, Any]]:
         """テキストからタスクを分析"""
         if not self.openai_client:
             return [], "OpenAI APIキーが設定されていません"
         
         try:
             prompt = f"""
-以下のテキストからタスク（やるべきこと）を抽出してください。
-タスクの形式で返してください：
-
-テキスト：
-{text}
-
-抽出されたタスク（JSON形式）：
-"""
+            以下のテキストからタスクを抽出してください。
+            各タスクについて、以下の情報を提供してください：
+            - title: タスクのタイトル
+            - description: タスクの詳細説明
+            - priority: 優先度（低、中、高、緊急）
+            - due_date: 期限（YYYY-MM-DD形式、不明な場合はnull）
+            - category: カテゴリ（仕事、プライベート、勉強、健康、その他）
+            
+            テキスト: {text}
+            
+            JSON形式で回答してください。
+            """
             
             response = self.openai_client.chat.completions.create(
                 model="gpt-3.5-turbo",
-                messages=[
-                    {"role": "system", "content": "あなたはタスク抽出の専門家です。テキストからタスクを抽出し、JSON形式で返してください。"},
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.3,
-                max_tokens=500
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.3
             )
             
             result = response.choices[0].message.content
-            return self._parse_task_result(result), None
+            # JSON解析の実装
+            return self._parse_tasks(result)
             
         except Exception as e:
             return [], f"タスク分析エラー: {str(e)}"
     
-    def _parse_task_result(self, result: str) -> List[Dict[str, Any]]:
-        """タスク結果を解析"""
+    def _parse_tasks(self, result: str) -> List[Dict[str, Any]]:
+        """タスク解析結果をパース"""
         try:
-            # JSON形式の結果を解析
-            import re
-            tasks = []
-            
-            # タスクのパターンを検索
-            task_patterns = [
-                r'["「](.+?)[」"]',  # 引用符で囲まれたタスク
-                r'^[-•*]\s*(.+?)$',  # 箇条書きのタスク
-                r'タスク[：:]\s*(.+?)$',  # タスク: 形式
-            ]
-            
-            lines = result.split('\n')
-            for line in lines:
-                line = line.strip()
-                if not line:
-                    continue
-                
-                for pattern in task_patterns:
-                    match = re.search(pattern, line)
-                    if match:
-                        task_text = match.group(1).strip()
-                        if task_text and len(task_text) > 3:
-                            tasks.append({
-                                "title": task_text,
-                                "description": task_text,
-                                "priority": "medium",
-                                "category": "音声文字起こし"
-                            })
-                        break
-            
-            return tasks
-            
-        except Exception as e:
-            st.error(f"タスク解析エラー: {str(e)}")
+            import json
+            tasks = json.loads(result)
+            return tasks if isinstance(tasks, list) else []
+        except:
             return []
-    
-    def is_task_related(self, text: str) -> bool:
-        """テキストがタスク関連かどうかを判定"""
-        task_keywords = [
-            "やる", "する", "完了", "終了", "開始", "準備", "確認", "チェック",
-            "予定", "スケジュール", "締切", "期限", "期限", "提出", "報告",
-            "会議", "打ち合わせ", "ミーティング", "面談", "訪問", "出張",
-            "買い物", "購入", "注文", "予約", "申し込み", "申請",
-            "作成", "制作", "編集", "修正", "更新", "変更", "改善",
-            "調査", "研究", "分析", "検討", "検証", "テスト"
-        ]
-        
-        text_lower = text.lower()
-        for keyword in task_keywords:
-            if keyword in text_lower:
-                return True
-        return False
 
 
 class EventAnalyzer:
     """イベント分析クラス"""
     
-    def __init__(self, openai_client: Optional[openai.OpenAI] = None) -> None:
+    def __init__(self, openai_client=None) -> None:
         self.openai_client = openai_client
     
-    def analyze_text_for_events(self, text: str) -> tuple[List[Dict[str, Any]], Optional[str]]:
+    def analyze_text(self, text: str) -> List[Dict[str, Any]]:
         """テキストからイベントを分析"""
         if not self.openai_client:
             return [], "OpenAI APIキーが設定されていません"
         
         try:
             prompt = f"""
-以下のテキストからイベント（予定、スケジュール）を抽出してください。
-イベントの形式で返してください：
-
-テキスト：
-{text}
-
-抽出されたイベント（JSON形式）：
-"""
+            以下のテキストからイベントを抽出してください。
+            各イベントについて、以下の情報を提供してください：
+            - title: イベントのタイトル
+            - description: イベントの詳細説明
+            - start_date: 開始日時（YYYY-MM-DD HH:MM形式、不明な場合はnull）
+            - end_date: 終了日時（YYYY-MM-DD HH:MM形式、不明な場合はnull）
+            - category: カテゴリ（会議、予定、イベント、その他）
+            - all_day: 終日イベントかどうか（true/false）
+            
+            テキスト: {text}
+            
+            JSON形式で回答してください。
+            """
             
             response = self.openai_client.chat.completions.create(
                 model="gpt-3.5-turbo",
-                messages=[
-                    {"role": "system", "content": "あなたはイベント抽出の専門家です。テキストからイベントを抽出し、JSON形式で返してください。"},
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.3,
-                max_tokens=500
+                messages=[{"role": "user", "content": prompt}],
+                temperature=0.3
             )
             
             result = response.choices[0].message.content
-            return self._parse_event_result(result), None
+            # JSON解析の実装
+            return self._parse_events(result)
             
         except Exception as e:
             return [], f"イベント分析エラー: {str(e)}"
     
-    def _parse_event_result(self, result: str) -> List[Dict[str, Any]]:
-        """イベント結果を解析"""
+    def _parse_events(self, result: str) -> List[Dict[str, Any]]:
+        """イベント解析結果をパース"""
         try:
-            import re
-            events = []
-            
-            # イベントのパターンを検索
-            event_patterns = [
-                r'["「](.+?)[」"]',  # 引用符で囲まれたイベント
-                r'^[-•*]\s*(.+?)$',  # 箇条書きのイベント
-                r'予定[：:]\s*(.+?)$',  # 予定: 形式
-                r'会議[：:]\s*(.+?)$',  # 会議: 形式
-            ]
-            
-            lines = result.split('\n')
-            for line in lines:
-                line = line.strip()
-                if not line:
-                    continue
-                
-                for pattern in event_patterns:
-                    match = re.search(pattern, line)
-                    if match:
-                        event_text = match.group(1).strip()
-                        if event_text and len(event_text) > 3:
-                            events.append({
-                                "title": event_text,
-                                "description": event_text,
-                                "category": "音声文字起こし"
-                            })
-                        break
-            
-            return events
-            
-        except Exception as e:
-            st.error(f"イベント解析エラー: {str(e)}")
+            import json
+            events = json.loads(result)
+            return events if isinstance(events, list) else []
+        except:
             return []
     
     def is_event_related(self, text: str) -> bool:
@@ -1229,7 +1168,7 @@ class GoogleAuthManager:
 # グローバル認証マネージャーインスタンス
 _google_auth_manager = None
 
-def get_google_auth_manager() -> GoogleAuthManager:
+def get_google_auth_manager() -> 'GoogleAuthManager':
     """グローバル認証マネージャーを取得"""
     global _google_auth_manager
     if _google_auth_manager is None:
