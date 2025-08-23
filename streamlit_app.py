@@ -631,6 +631,16 @@ def main():
     st.sidebar.write(f"Python: {sys.version}")
     st.sidebar.write(f"Streamlit: {st.__version__}")
     
+    # 音声処理ライブラリの状況表示
+    if UTILS_AVAILABLE:
+        try:
+            from utils_audiorec import show_audio_library_status
+            show_audio_library_status()
+        except Exception as e:
+            st.sidebar.warning(f"音声処理ライブラリ状況の表示エラー: {e}")
+    else:
+        st.sidebar.warning("音声処理ライブラリ状況が確認できません")
+    
     # 設定の検証
     if CONFIG_AVAILABLE:
         try:

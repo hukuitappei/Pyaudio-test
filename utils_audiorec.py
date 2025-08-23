@@ -78,7 +78,7 @@ except ImportError:
     
     pyaudio = PyAudio()
 
-# 音声処理ライブラリ
+# 音声処理ライブラリ（Python 3.13対応版）
 try:
     import soundfile as sf
     SOUNDFILE_AVAILABLE = True
@@ -90,6 +90,20 @@ try:
     LIBROSA_AVAILABLE = True
 except ImportError:
     LIBROSA_AVAILABLE = False
+
+# 代替音声処理ライブラリ（Python 3.13対応）
+try:
+    from pydub import AudioSegment
+    PYDUB_AVAILABLE = True
+except ImportError:
+    PYDUB_AVAILABLE = False
+
+try:
+    from scipy import signal
+    from scipy.io import wavfile
+    SCIPY_AVAILABLE = True
+except ImportError:
+    SCIPY_AVAILABLE = False
 
 
 # ローカルインポート
@@ -1381,31 +1395,90 @@ def record_audio(duration: int = 5, sample_rate: int = 44100, channels: int = 1)
         return None
 
 def save_audio_file(audio_data: np.ndarray, filename: str, sample_rate: int = 44100) -> bool:
-    """音声ファイルを保存"""
+    """音声ファイルを保存（Python 3.13対応版）"""
     
+    # 1. soundfileライブラリを試行
     if SOUNDFILE_AVAILABLE:
         try:
             sf.write(filename, audio_data, sample_rate)
             return True
         except Exception as e:
-            st.error(f"音声ファイル保存エラー: {e}")
-            return False
-    else:
-        st.warning("soundfileライブラリが利用できません")
+            st.warning(f"soundfileでの保存に失敗: {e}")
+    
+    # 2. scipyライブラリを試行
+    if SCIPY_AVAILABLE:
+        try:
+            wavfile.write(filename, sample_rate, audio_data)
+            return True
+        except Exception as e:
+            st.warning(f"scipyでの保存に失敗: {e}")
+    
+    # 3. pydubライブラリを試行
+    if PYDUB_AVAILABLE:
+        try:
+            # numpy配列をAudioSegmentに変換
+            audio_segment = AudioSegment(
+                audio_data.tobytes(), 
+                frame_rate=sample_rate,
+                sample_width=audio_data.dtype.itemsize,
+                channels=1
+            )
+            audio_segment.export(filename, format="wav")
+            return True
+        except Exception as e:
+            st.warning(f"pydubでの保存に失敗: {e}")
+    
+    # 4. フォールバック: 生のWAVファイルとして保存
+    try:
+        import wave
+        with wave.open(filename, 'wb') as wav_file:
+            wav_file.setnchannels(1)
+            wav_file.setsampwidth(2)  # 16-bit
+            wav_file.setframerate(sample_rate)
+            wav_file.writeframes(audio_data.tobytes())
+        return True
+    except Exception as e:
+        st.error(f"音声ファイル保存エラー: {e}")
         return False
 
 def load_audio_file(filename: str) -> Optional[Tuple[np.ndarray, int]]:
-    """音声ファイルを読み込み"""
+    """音声ファイルを読み込み（Python 3.13対応版）"""
     
+    # 1. soundfileライブラリを試行
     if SOUNDFILE_AVAILABLE:
         try:
             audio_data, sample_rate = sf.read(filename)
             return audio_data, sample_rate
         except Exception as e:
-            st.error(f"音声ファイル読み込みエラー: {e}")
-            return None
-    else:
-        st.warning("soundfileライブラリが利用できません")
+            st.warning(f"soundfileでの読み込みに失敗: {e}")
+    
+    # 2. scipyライブラリを試行
+    if SCIPY_AVAILABLE:
+        try:
+            sample_rate, audio_data = wavfile.read(filename)
+            return audio_data, sample_rate
+        except Exception as e:
+            st.warning(f"scipyでの読み込みに失敗: {e}")
+    
+    # 3. pydubライブラリを試行
+    if PYDUB_AVAILABLE:
+        try:
+            audio_segment = AudioSegment.from_file(filename)
+            audio_data = np.array(audio_segment.get_array_of_samples())
+            sample_rate = audio_segment.frame_rate
+            return audio_data, sample_rate
+        except Exception as e:
+            st.warning(f"pydubでの読み込みに失敗: {e}")
+    
+    # 4. フォールバック: 生のWAVファイルとして読み込み
+    try:
+        import wave
+        with wave.open(filename, 'rb') as wav_file:
+            sample_rate = wav_file.getframerate()
+            audio_data = np.frombuffer(wav_file.readframes(wav_file.getnframes()), dtype=np.int16)
+            return audio_data, sample_rate
+    except Exception as e:
+        st.error(f"音声ファイル読み込みエラー: {e}")
         return None
 
 
@@ -1420,3 +1493,44 @@ def save_transcription_file(transcription_text: str, filename: str) -> bool:
     except Exception as e:
         st.error(f"文字起こし保存エラー: {e}")
         return False
+
+
+def show_audio_library_status():
+    """音声処理ライブラリの利用状況を表示"""
+    st.sidebar.write("### 🎵 音声処理ライブラリ状況")
+    
+    # 基本ライブラリ
+    st.sidebar.write(f"**PyAudio**: {'✅ 利用可能' if PYAUDIO_AVAILABLE else '❌ 利用不可'}")
+    st.sidebar.write(f"**OpenAI**: {'✅ 利用可能' if OPENAI_AVAILABLE else '❌ 利用不可'}")
+    
+    # 音声処理ライブラリ
+    st.sidebar.write(f"**SoundFile**: {'✅ 利用可能' if SOUNDFILE_AVAILABLE else '❌ 利用不可'}")
+    st.sidebar.write(f"**Librosa**: {'✅ 利用可能' if LIBROSA_AVAILABLE else '❌ 利用不可'}")
+    
+    # 代替ライブラリ
+    st.sidebar.write(f"**PyDub**: {'✅ 利用可能' if PYDUB_AVAILABLE else '❌ 利用不可'}")
+    st.sidebar.write(f"**SciPy**: {'✅ 利用可能' if SCIPY_AVAILABLE else '❌ 利用不可'}")
+    
+    # Python 3.13対応状況
+    python_version = sys.version_info
+    if python_version.major == 3 and python_version.minor >= 13:
+        st.sidebar.warning("⚠️ Python 3.13+環境: 一部の音声処理ライブラリが利用できません")
+        st.sidebar.info("💡 代替ライブラリ（PyDub, SciPy）を使用します")
+    else:
+        st.sidebar.success("✅ 標準的なPython環境: 全ライブラリが利用可能")
+
+
+def get_available_audio_libraries() -> List[str]:
+    """利用可能な音声処理ライブラリのリストを取得"""
+    available_libs = []
+    
+    if SOUNDFILE_AVAILABLE:
+        available_libs.append("SoundFile")
+    if LIBROSA_AVAILABLE:
+        available_libs.append("Librosa")
+    if PYDUB_AVAILABLE:
+        available_libs.append("PyDub")
+    if SCIPY_AVAILABLE:
+        available_libs.append("SciPy")
+    
+    return available_libs

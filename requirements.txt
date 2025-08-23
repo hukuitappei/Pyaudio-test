@@ -8,5 +8,11 @@ google-auth-oauthlib>=1.0.0
 google-auth-httplib2>=0.1.0
 google-api-python-client>=2.100.0
 # pyaudio>=0.2.11  # Streamlit Cloud環境では使用不可
-soundfile>=0.12.1
-librosa>=0.10.0
+
+# 音声処理ライブラリ（Python 3.13対応版）
+# librosa>=0.10.0  # Python 3.13では互換性問題があるためコメントアウト
+# soundfile>=0.12.1  # librosaに依存するためコメントアウト
+
+# 代替音声処理ライブラリ
+pydub>=0.25.1  # 音声ファイル処理用
+scipy>=1.11.0  # 音声処理用
