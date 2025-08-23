@@ -616,6 +616,9 @@ def render_task_list_tab():
     """タスク一覧タブ"""
     st.write("**📝 タスク一覧**")
     
+    # TaskManagerをインスタンス化
+    task_manager = TaskManager()
+    
     # タスクを読み込み
     tasks = task_manager.load_tasks()
     
@@ -681,6 +684,9 @@ def render_task_list_tab():
 def render_task_add_tab(auth_manager):
     """タスク追加タブ"""
     st.write("**➕ タスク追加**")
+    
+    # TaskManagerをインスタンス化
+    task_manager = TaskManager()
     
     with st.form("add_task_form"):
         title = st.text_input("タスク名", key="task_title")
@@ -773,6 +779,9 @@ def render_task_calendar_sync_tab(auth_manager):
     """タスクカレンダー連携タブ"""
     st.write("**📅 カレンダー連携**")
     
+    # TaskManagerをインスタンス化
+    task_manager = TaskManager()
+    
     # 認証状態の表示
     if auth_manager.is_authenticated():
         st.success("✅ Googleカレンダー認証済み")
@@ -836,6 +845,9 @@ def render_task_calendar_sync_tab(auth_manager):
 def render_task_settings_tab():
     """タスク設定タブ"""
     st.write("**⚙️ タスク設定**")
+    
+    # TaskManagerをインスタンス化
+    task_manager = TaskManager()
     
     # タスク統計
     tasks = task_manager.load_tasks()
