@@ -108,7 +108,7 @@ except ImportError:
 
 # ローカルインポート
 try:
-    from config_manager import get_secret, get_google_credentials, is_streamlit_cloud
+    from config.config_manager import get_secret, get_google_credentials, is_streamlit_cloud
     CONFIG_MANAGER_AVAILABLE = True
 except ImportError:
     # Streamlit Cloud環境でのフォールバック
