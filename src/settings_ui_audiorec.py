@@ -15,7 +15,7 @@ import streamlit as st
 
 # ローカルインポート
 try:
-    from utils_audiorec import (
+    from src.utils_audiorec import (
         EnhancedSettingsManager, CommandManager, UserDictionaryManager,
         TaskManager, CalendarManager, TaskAnalyzer, EventAnalyzer,
         GoogleCalendarManager, DeviceManager, get_google_auth_manager

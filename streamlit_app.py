@@ -14,6 +14,10 @@ import traceback
 import wave
 from datetime import datetime, date
 from typing import Optional, List, Dict, Any
+from pathlib import Path
+
+# プロジェクトルートをパスに追加
+sys.path.append(str(Path(__file__).parent))
 
 # サードパーティライブラリ
 import numpy as np
