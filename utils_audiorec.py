@@ -24,7 +24,35 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
 # ローカルインポート
-from config_manager import get_secret, get_google_credentials, is_streamlit_cloud
+try:
+    from config_manager import get_secret, get_google_credentials, is_streamlit_cloud
+    CONFIG_MANAGER_AVAILABLE = True
+except ImportError:
+    # Streamlit Cloud環境でのフォールバック
+    CONFIG_MANAGER_AVAILABLE = False
+    def get_secret(key: str, default=None):
+        """フォールバック用の設定取得関数"""
+        import os
+        import streamlit as st
+        # 環境変数を優先
+        value = os.getenv(key)
+        if value:
+            return value
+        # Streamlit Secretsを確認
+        try:
+            if hasattr(st, 'secrets') and key in st.secrets:
+                return st.secrets[key]
+        except Exception:
+            pass
+        return default
+    
+    def get_google_credentials():
+        """フォールバック用のGoogle認証情報取得関数"""
+        return None
+    
+    def is_streamlit_cloud():
+        """フォールバック用のStreamlit Cloud判定関数"""
+        return True
 
 
 class EnhancedSettingsManager:
@@ -391,233 +419,296 @@ class TaskManager:
     
     def __init__(self) -> None:
         self.tasks_file = "settings/tasks.json"
-        self.ensure_settings_directory()
+        self.ensure_tasks_directory()
+        self.auth_manager = get_google_auth_manager()
     
-    def ensure_settings_directory(self) -> None:
-        """設定ディレクトリの作成"""
+    def ensure_tasks_directory(self) -> None:
+        """タスクディレクトリの作成"""
         os.makedirs("settings", exist_ok=True)
     
     def load_tasks(self) -> Dict[str, Any]:
         """タスクを読み込み"""
         default_tasks = {
             "tasks": {},
-            "metadata": {
-                "created_at": datetime.now().isoformat(),
-                "last_updated": datetime.now().isoformat(),
-                "total_tasks": 0
-            }
+            "categories": ["仕事", "プライベート", "勉強", "健康", "その他"],
+            "priorities": ["低", "中", "高", "緊急"]
         }
         
         try:
             if os.path.exists(self.tasks_file):
                 with open(self.tasks_file, 'r', encoding='utf-8') as f:
-                    loaded_tasks = json.load(f)
-                    return self._merge_tasks(default_tasks, loaded_tasks)
+                    return json.load(f)
             else:
+                self.save_tasks(default_tasks)
                 return default_tasks
         except Exception as e:
-            st.error(f"タスク読み込みエラー: {str(e)}")
+            st.error(f"タスク読み込みエラー: {e}")
             return default_tasks
     
-    def _merge_tasks(self, default_tasks: Dict[str, Any], loaded_tasks: Dict[str, Any]) -> Dict[str, Any]:
-        """タスクの統合"""
-        merged = default_tasks.copy()
-        if "tasks" in loaded_tasks:
-            merged["tasks"] = loaded_tasks["tasks"]
-        if "metadata" in loaded_tasks:
-            merged["metadata"].update(loaded_tasks["metadata"])
-        return merged
-    
-    def save_tasks(self, tasks: Optional[Dict[str, Any]] = None) -> bool:
+    def save_tasks(self, tasks: Dict[str, Any]) -> bool:
         """タスクを保存"""
-        if tasks is None:
-            tasks = self.load_tasks()
-        
         try:
-            tasks["metadata"]["last_updated"] = datetime.now().isoformat()
-            tasks["metadata"]["total_tasks"] = len(tasks["tasks"])
-            
             with open(self.tasks_file, 'w', encoding='utf-8') as f:
                 json.dump(tasks, f, ensure_ascii=False, indent=2)
             return True
         except Exception as e:
-            st.error(f"タスク保存エラー: {str(e)}")
+            st.error(f"タスク保存エラー: {e}")
             return False
     
-    def add_task(self, title: str, description: str = "", priority: str = "medium", 
-                due_date: Optional[str] = None, category: str = "general", status: str = "pending") -> bool:
+    def add_task(self, title: str, description: str = "", priority: str = "中", 
+                 due_date: Optional[str] = None, category: str = "その他") -> bool:
         """タスクを追加"""
-        tasks = self.load_tasks()
-        
-        task_id = str(uuid.uuid4())
-        task = {
-            "id": task_id,
-            "title": title,
-            "description": description,
-            "priority": priority,
-            "due_date": due_date,
-            "category": category,
-            "status": status,
-            "created_at": datetime.now().isoformat(),
-            "updated_at": datetime.now().isoformat()
-        }
-        
-        tasks["tasks"][task_id] = task
-        return self.save_tasks(tasks)
-    
-    def update_task(self, task_id: str, **kwargs: Any) -> bool:
-        """タスクを更新"""
-        tasks = self.load_tasks()
-        
-        if task_id in tasks["tasks"]:
-            tasks["tasks"][task_id].update(kwargs)
-            tasks["tasks"][task_id]["updated_at"] = datetime.now().isoformat()
+        try:
+            tasks = self.load_tasks()
+            task_id = str(uuid.uuid4())
+            
+            task = {
+                "id": task_id,
+                "title": title,
+                "description": description,
+                "priority": priority,
+                "status": "pending",
+                "created_at": datetime.now().isoformat(),
+                "due_date": due_date,
+                "category": category,
+                "google_event_id": None
+            }
+            
+            tasks["tasks"][task_id] = task
             return self.save_tasks(tasks)
-        return False
+        except Exception as e:
+            st.error(f"タスク追加エラー: {e}")
+            return False
+    
+    def update_task(self, task_id: str, **kwargs) -> bool:
+        """タスクを更新"""
+        try:
+            tasks = self.load_tasks()
+            if task_id in tasks["tasks"]:
+                tasks["tasks"][task_id].update(kwargs)
+                return self.save_tasks(tasks)
+            return False
+        except Exception as e:
+            st.error(f"タスク更新エラー: {e}")
+            return False
     
     def delete_task(self, task_id: str) -> bool:
         """タスクを削除"""
-        tasks = self.load_tasks()
-        
-        if task_id in tasks["tasks"]:
-            del tasks["tasks"][task_id]
-            return self.save_tasks(tasks)
-        return False
+        try:
+            tasks = self.load_tasks()
+            if task_id in tasks["tasks"]:
+                # Googleカレンダーからも削除
+                task = tasks["tasks"][task_id]
+                if task.get('google_event_id'):
+                    self.auth_manager.get_service().events().delete(
+                        calendarId='primary', 
+                        eventId=task['google_event_id']
+                    ).execute()
+                
+                del tasks["tasks"][task_id]
+                return self.save_tasks(tasks)
+            return False
+        except Exception as e:
+            st.error(f"タスク削除エラー: {e}")
+            return False
     
-    def get_task(self, task_id: str) -> Optional[Dict[str, Any]]:
-        """タスクを取得"""
-        tasks = self.load_tasks()
-        return tasks["tasks"].get(task_id)
-    
-    def get_tasks_by_status(self, status: str = "pending") -> Dict[str, Any]:
-        """ステータス別にタスクを取得"""
-        tasks = self.load_tasks()
-        return {k: v for k, v in tasks["tasks"].items() if v["status"] == status}
-    
-    def get_tasks_by_category(self, category: str) -> Dict[str, Any]:
-        """カテゴリ別にタスクを取得"""
-        tasks = self.load_tasks()
-        return {k: v for k, v in tasks["tasks"].items() if v["category"] == category}
+    def sync_to_google_calendar(self, task_id: str) -> bool:
+        """タスクをGoogleカレンダーに同期"""
+        try:
+            tasks = self.load_tasks()
+            if task_id not in tasks["tasks"]:
+                return False
+            
+            task = tasks["tasks"][task_id]
+            if task.get('google_event_id'):
+                st.info("既にGoogleカレンダーに同期済みです")
+                return True
+            
+            service = self.auth_manager.get_service()
+            if not service:
+                st.error("Googleカレンダーが認証されていません")
+                return False
+            
+            event = {
+                'summary': task['title'],
+                'description': task['description'],
+                'start': {
+                    'dateTime': task['due_date'] or datetime.now().isoformat(),
+                    'timeZone': 'Asia/Tokyo',
+                },
+                'end': {
+                    'dateTime': task['due_date'] or (datetime.now() + timedelta(hours=1)).isoformat(),
+                    'timeZone': 'Asia/Tokyo',
+                }
+            }
+            
+            created_event = service.events().insert(
+                calendarId='primary', body=event
+            ).execute()
+            
+            # タスクにGoogleイベントIDを保存
+            task['google_event_id'] = created_event['id']
+            self.save_tasks(tasks)
+            
+            st.success("Googleカレンダーに同期しました")
+            return True
+            
+        except Exception as e:
+            st.error(f"Googleカレンダー同期エラー: {e}")
+            return False
 
 
 class CalendarManager:
     """カレンダー管理クラス"""
     
     def __init__(self) -> None:
-        self.events_file = "settings/calendar.json"
-        self.ensure_settings_directory()
+        self.calendar_file = "settings/calendar.json"
+        self.ensure_calendar_directory()
+        self.auth_manager = get_google_auth_manager()
     
-    def ensure_settings_directory(self) -> None:
-        """設定ディレクトリの作成"""
+    def ensure_calendar_directory(self) -> None:
+        """カレンダーディレクトリの作成"""
         os.makedirs("settings", exist_ok=True)
     
     def load_events(self) -> Dict[str, Any]:
         """イベントを読み込み"""
         default_events = {
             "events": {},
-            "metadata": {
-                "created_at": datetime.now().isoformat(),
-                "last_updated": datetime.now().isoformat(),
-                "total_events": 0
-            }
+            "categories": ["会議", "予定", "イベント", "その他"]
         }
         
         try:
-            if os.path.exists(self.events_file):
-                with open(self.events_file, 'r', encoding='utf-8') as f:
-                    loaded_events = json.load(f)
-                    return self._merge_events(default_events, loaded_events)
+            if os.path.exists(self.calendar_file):
+                with open(self.calendar_file, 'r', encoding='utf-8') as f:
+                    return json.load(f)
             else:
+                self.save_events(default_events)
                 return default_events
         except Exception as e:
-            st.error(f"イベント読み込みエラー: {str(e)}")
+            st.error(f"イベント読み込みエラー: {e}")
             return default_events
     
-    def _merge_events(self, default_events: Dict[str, Any], loaded_events: Dict[str, Any]) -> Dict[str, Any]:
-        """イベントの統合"""
-        merged = default_events.copy()
-        if "events" in loaded_events:
-            merged["events"] = loaded_events["events"]
-        if "metadata" in loaded_events:
-            merged["metadata"].update(loaded_events["metadata"])
-        return merged
-    
-    def save_events(self, events: Optional[Dict[str, Any]] = None) -> bool:
+    def save_events(self, events: Dict[str, Any]) -> bool:
         """イベントを保存"""
-        if events is None:
-            events = self.load_events()
-        
         try:
-            events["metadata"]["last_updated"] = datetime.now().isoformat()
-            events["metadata"]["total_events"] = len(events["events"])
-            
-            with open(self.events_file, 'w', encoding='utf-8') as f:
+            with open(self.calendar_file, 'w', encoding='utf-8') as f:
                 json.dump(events, f, ensure_ascii=False, indent=2)
             return True
         except Exception as e:
-            st.error(f"イベント保存エラー: {str(e)}")
+            st.error(f"イベント保存エラー: {e}")
             return False
     
-    def add_event(self, title: str, description: str = "", start_date: Optional[str] = None, 
-                 end_date: Optional[str] = None, all_day: bool = False, category: str = "general") -> bool:
+    def add_event(self, title: str, description: str = "", 
+                  start_date: str = None, end_date: str = None,
+                  all_day: bool = False, category: str = "その他") -> bool:
         """イベントを追加"""
-        events = self.load_events()
-        
-        event_id = str(uuid.uuid4())
-        event = {
-            "id": event_id,
-            "title": title,
-            "description": description,
-            "start_date": start_date,
-            "end_date": end_date,
-            "all_day": all_day,
-            "category": category,
-            "created_at": datetime.now().isoformat(),
-            "updated_at": datetime.now().isoformat()
-        }
-        
-        events["events"][event_id] = event
-        return self.save_events(events)
-    
-    def update_event(self, event_id: str, **kwargs: Any) -> bool:
-        """イベントを更新"""
-        events = self.load_events()
-        
-        if event_id in events["events"]:
-            events["events"][event_id].update(kwargs)
-            events["events"][event_id]["updated_at"] = datetime.now().isoformat()
+        try:
+            events = self.load_events()
+            event_id = str(uuid.uuid4())
+            
+            if not start_date:
+                start_date = datetime.now().isoformat()
+            if not end_date:
+                end_date = (datetime.now() + timedelta(hours=1)).isoformat()
+            
+            event = {
+                "id": event_id,
+                "title": title,
+                "description": description,
+                "start_date": start_date,
+                "end_date": end_date,
+                "all_day": all_day,
+                "category": category,
+                "created_at": datetime.now().isoformat(),
+                "google_event_id": None
+            }
+            
+            events["events"][event_id] = event
             return self.save_events(events)
-        return False
+        except Exception as e:
+            st.error(f"イベント追加エラー: {e}")
+            return False
+    
+    def update_event(self, event_id: str, **kwargs) -> bool:
+        """イベントを更新"""
+        try:
+            events = self.load_events()
+            if event_id in events["events"]:
+                events["events"][event_id].update(kwargs)
+                return self.save_events(events)
+            return False
+        except Exception as e:
+            st.error(f"イベント更新エラー: {e}")
+            return False
     
     def delete_event(self, event_id: str) -> bool:
         """イベントを削除"""
-        events = self.load_events()
-        
-        if event_id in events["events"]:
-            del events["events"][event_id]
-            return self.save_events(events)
-        return False
+        try:
+            events = self.load_events()
+            if event_id in events["events"]:
+                # Googleカレンダーからも削除
+                event = events["events"][event_id]
+                if event.get('google_event_id'):
+                    self.auth_manager.get_service().events().delete(
+                        calendarId='primary', 
+                        eventId=event['google_event_id']
+                    ).execute()
+                
+                del events["events"][event_id]
+                return self.save_events(events)
+            return False
+        except Exception as e:
+            st.error(f"イベント削除エラー: {e}")
+            return False
     
-    def get_event(self, event_id: str) -> Optional[Dict[str, Any]]:
-        """イベントを取得"""
-        events = self.load_events()
-        return events["events"].get(event_id)
-    
-    def get_events_by_date(self, target_date: Union[date, str]) -> Dict[str, Any]:
-        """日付別にイベントを取得"""
-        events = self.load_events()
-        target_date_str = target_date.isoformat() if isinstance(target_date, date) else str(target_date)
-        
-        result = {}
-        for event_id, event in events["events"].items():
-            if event["start_date"] and event["start_date"].startswith(target_date_str):
-                result[event_id] = event
-        return result
-    
-    def get_events_by_category(self, category: str) -> Dict[str, Any]:
-        """カテゴリ別にイベントを取得"""
-        events = self.load_events()
-        return {k: v for k, v in events["events"].items() if v["category"] == category}
+    def sync_to_google_calendar(self, event_id: str) -> bool:
+        """イベントをGoogleカレンダーに同期"""
+        try:
+            events = self.load_events()
+            if event_id not in events["events"]:
+                return False
+            
+            event = events["events"][event_id]
+            if event.get('google_event_id'):
+                st.info("既にGoogleカレンダーに同期済みです")
+                return True
+            
+            service = self.auth_manager.get_service()
+            if not service:
+                st.error("Googleカレンダーが認証されていません")
+                return False
+            
+            google_event = {
+                'summary': event['title'],
+                'description': event['description'],
+                'start': {
+                    'dateTime': event['start_date'],
+                    'timeZone': 'Asia/Tokyo',
+                },
+                'end': {
+                    'dateTime': event['end_date'],
+                    'timeZone': 'Asia/Tokyo',
+                }
+            }
+            
+            if event.get('all_day', False):
+                google_event['start'] = {'date': event['start_date'][:10]}
+                google_event['end'] = {'date': event['end_date'][:10]}
+            
+            created_event = service.events().insert(
+                calendarId='primary', body=google_event
+            ).execute()
+            
+            # イベントにGoogleイベントIDを保存
+            event['google_event_id'] = created_event['id']
+            self.save_events(events)
+            
+            st.success("Googleカレンダーに同期しました")
+            return True
+            
+        except Exception as e:
+            st.error(f"Googleカレンダー同期エラー: {e}")
+            return False
 
 
 class ShortcutManager:
@@ -836,8 +927,8 @@ class EventAnalyzer:
         return False
 
 
-class GoogleCalendarManager:
-    """GoogleカレンダーとのStreamlit対応連携クラス"""
+class GoogleAuthManager:
+    """Google認証の統合管理クラス"""
     
     SCOPES = ['https://www.googleapis.com/auth/calendar']
     CREDENTIALS_FILE = 'credentials.json'
@@ -858,6 +949,8 @@ class GoogleCalendarManager:
             st.session_state.google_auth_url = None
         if 'google_auth_key' not in st.session_state:
             st.session_state.google_auth_key = None
+        if 'google_auth_status' not in st.session_state:
+            st.session_state.google_auth_status = False
     
     def authenticate(self) -> bool:
         """Google認証を実行（Streamlit対応）"""
@@ -865,8 +958,8 @@ class GoogleCalendarManager:
             # セッション状態の初期化
             self._initialize_session_state()
             
-            # セッション状態から認証情報を復元
-            if st.session_state.google_credentials:
+            # 既に認証済みの場合は復元
+            if st.session_state.google_auth_status and st.session_state.google_credentials:
                 self.credentials = st.session_state.google_credentials
                 if self._is_credentials_valid():
                     self.service = build('calendar', 'v3', credentials=self.credentials)
@@ -885,6 +978,7 @@ class GoogleCalendarManager:
                 
             self.credentials = creds
             st.session_state.google_credentials = creds
+            st.session_state.google_auth_status = True
             self.service = build('calendar', 'v3', credentials=creds)
             return True
             
@@ -1020,13 +1114,10 @@ class GoogleCalendarManager:
                 # リフレッシュトークンを表示（ユーザーが環境変数に設定するため）
                 if creds.refresh_token:
                     st.success("✅ 認証が完了しました！")
-                    st.info("以下のリフレッシュトークンを.envファイルのGOOGLE_REFRESH_TOKENに設定してください:")
+                    st.info("🔑 リフレッシュトークン（環境変数に設定してください）:")
                     st.code(creds.refresh_token)
                     
-                    # セッション状態に保存
-                    st.session_state.google_credentials = creds
-                    
-                    # 認証フローをクリア
+                    # セッション状態をクリア
                     if 'google_auth_flow' in st.session_state:
                         del st.session_state.google_auth_flow
                     if 'google_auth_url' in st.session_state:
@@ -1036,295 +1127,76 @@ class GoogleCalendarManager:
                     
                     return creds
                 else:
-                    st.error("❌ リフレッシュトークンの取得に失敗しました")
+                    st.error("❌ リフレッシュトークンが取得できませんでした")
+                    return None
                     
             except Exception as e:
-                st.error(f"❌ 認証コードの処理に失敗しました: {e}")
+                st.error(f"認証完了エラー: {e}")
+                return None
         
         return None
     
     def _authenticate_from_file(self) -> Optional[Credentials]:
-        """ファイルベースの認証（開発用・Streamlit非対応）"""
-        st.warning("⚠️ ファイルベース認証はStreamlit環境では制限があります。")
-        st.info("環境変数による認証を推奨します。setup_google_auth.pyを実行してください。")
-        
-        # 既存のトークンファイルがあるかチェック
-        if os.path.exists(self.TOKEN_FILE):
-            try:
-                with open(self.TOKEN_FILE, 'rb') as token:
-                    creds = pickle.load(token)
+        """ファイルからの認証（フォールバック）"""
+        try:
+            if os.path.exists(self.CREDENTIALS_FILE):
+                creds = None
+                if os.path.exists(self.TOKEN_FILE):
+                    with open(self.TOKEN_FILE, 'rb') as token:
+                        creds = pickle.load(token)
                 
-                if creds and self._is_credentials_valid():
-                    return creds
-            except Exception as e:
-                st.error(f"トークンファイルの読み込みに失敗しました: {e}")
-        
-        # credentials.jsonファイルの確認
-        if not os.path.exists(self.CREDENTIALS_FILE):
-            st.error("❌ credentials.jsonファイルが見つかりません")
-            st.info("setup_google_auth.pyを実行して認証を設定してください")
+                if not creds or not creds.valid:
+                    if creds and creds.expired and creds.refresh_token:
+                        creds.refresh(Request())
+                    else:
+                        flow = Flow.from_client_secrets_file(
+                            self.CREDENTIALS_FILE, 
+                            self.SCOPES
+                        )
+                        creds = flow.run_local_server(port=0)
+                    
+                    with open(self.TOKEN_FILE, 'wb') as token:
+                        pickle.dump(creds, token)
+                
+                return creds
+            else:
+                st.warning(f"⚠️ {self.CREDENTIALS_FILE}が見つかりません")
+                return None
+                
+        except Exception as e:
+            st.error(f"ファイル認証エラー: {e}")
             return None
-        
-        st.error("❌ ファイルベース認証はStreamlit環境では完全にサポートされていません")
-        st.info("💡 解決方法: 環境変数による認証を使用してください")
+    
+    def get_service(self):
+        """Google Calendarサービスを取得"""
+        if self.service:
+            return self.service
+        elif self.authenticate():
+            return self.service
         return None
     
-    def get_authentication_status(self) -> str:
+    def is_authenticated(self) -> bool:
         """認証状態を確認"""
-        if not self.credentials:
-            return "未認証"
-        
-        if self.credentials.expired:
-            return "認証期限切れ"
-        
-        return "認証済み"
+        return st.session_state.get('google_auth_status', False) and self._is_credentials_valid()
     
-    def setup_web_authentication(self) -> None:
-        """Streamlit用の認証設定を表示"""
-        st.subheader("🔐 Googleカレンダー認証設定")
-        
-        # 現在の認証状態を表示
-        auth_status = self.get_authentication_status()
-        if auth_status == "認証済み":
-            st.success(f"✅ {auth_status}")
-        else:
-            st.warning(f"⚠️ {auth_status}")
-        
-        # 認証方法の説明
-        st.info("📋 認証設定手順:")
-        
-        with st.expander("🔧 環境変数による認証設定（推奨）"):
-            st.markdown("""
-            **手順:**
-            1. Google Cloud Consoleでプロジェクトを作成
-            2. Google Calendar APIを有効化
-            3. OAuth 2.0認証情報を作成
-            4. 以下の環境変数を設定:
-            """)
-            
-            st.code("""
-GOOGLE_CLIENT_ID=your_client_id
-GOOGLE_CLIENT_SECRET=your_client_secret
-GOOGLE_REFRESH_TOKEN=your_refresh_token  # 初回認証後に取得
-            """)
-            
-            st.markdown("5. `setup_google_auth.py`を実行して設定を完了")
-        
-        # 環境変数またはStreamlit Secretsの確認
-        client_id, client_secret, refresh_token = get_google_credentials()
-        
-        col1, col2, col3 = st.columns(3)
-        with col1:
-            if client_id:
-                st.success("✅ CLIENT_ID")
-            else:
-                st.error("❌ CLIENT_ID")
-        
-        with col2:
-            if client_secret:
-                st.success("✅ CLIENT_SECRET")
-            else:
-                st.error("❌ CLIENT_SECRET")
-        
-        with col3:
-            if refresh_token:
-                st.success("✅ REFRESH_TOKEN")
-            else:
-                st.warning("⚠️ REFRESH_TOKEN")
-        
-        # 認証実行
-        if client_id and client_secret:
-            if st.button("🔄 認証を実行", key="execute_google_auth"):
-                with st.spinner("認証中..."):
-                    if self.authenticate():
-                        st.success("✅ 認証が完了しました")
-                        st.rerun()
-                    else:
-                        st.error("❌ 認証に失敗しました")
-        else:
-            st.warning("⚠️ 環境変数を設定してください")
-            if st.button("🔧 設定スクリプトを実行", key="run_setup_script"):
-                st.info("ターミナルで `python setup_google_auth.py` を実行してください")
-    
-    def get_calendars(self) -> List[Dict[str, Any]]:
-        """利用可能なカレンダーリストを取得"""
-        if not self.service:
-            if not self.authenticate():
-                return []
-        
-        try:
-            calendar_list = self.service.calendarList().list().execute()
-            return calendar_list.get('items', [])
-        except HttpError as e:
-            st.error(f"カレンダーリストの取得に失敗しました: {e}")
-            return []
-        except Exception as e:
-            st.error(f"予期しないエラー: {e}")
-            return []
-    
-    def get_events(self, calendar_id: str = 'primary', max_results: int = 10) -> List[Dict[str, Any]]:
-        """指定したカレンダーからイベントを取得"""
-        if not self.service:
-            if not self.authenticate():
-                return []
-        
-        try:
-            now = datetime.utcnow().isoformat() + 'Z'
-            events_result = self.service.events().list(
-                calendarId=calendar_id,
-                timeMin=now,
-                maxResults=max_results,
-                singleEvents=True,
-                orderBy='startTime'
-            ).execute()
-            
-            return events_result.get('items', [])
-        except HttpError as e:
-            st.error(f"イベントの取得に失敗しました: {e}")
-            return []
-        except Exception as e:
-            st.error(f"予期しないエラー: {e}")
-            return []
-    
-    def create_event(self, event_data: Dict[str, Any], calendar_id: str = 'primary') -> Optional[Dict[str, Any]]:
-        """新しいイベントを作成"""
-        if not self.service:
-            if not self.authenticate():
-                return None
-        
-        try:
-            event = {
-                'summary': event_data['title'],
-                'description': event_data.get('description', ''),
-                'start': {
-                    'dateTime': event_data['start_date'],
-                    'timeZone': 'Asia/Tokyo',
-                },
-                'end': {
-                    'dateTime': event_data['end_date'],
-                    'timeZone': 'Asia/Tokyo',
-                }
-            }
-            
-            if event_data.get('all_day', False):
-                event['start'] = {'date': event_data['start_date'][:10]}
-                event['end'] = {'date': event_data['end_date'][:10]}
-            
-            created_event = self.service.events().insert(
-                calendarId=calendar_id, body=event).execute()
-            
-            st.success(f"イベント「{event_data['title']}」を作成しました")
-            return created_event
-            
-        except HttpError as e:
-            st.error(f"イベントの作成に失敗しました: {e}")
-            return None
-        except Exception as e:
-            st.error(f"予期しないエラー: {e}")
-            return None
-    
-    def update_event(self, event_id: str, event_data: Dict[str, Any], calendar_id: str = 'primary') -> Optional[Dict[str, Any]]:
-        """イベントを更新"""
-        if not self.service:
-            if not self.authenticate():
-                return None
-        
-        try:
-            event = {
-                'summary': event_data['title'],
-                'description': event_data.get('description', ''),
-                'start': {
-                    'dateTime': event_data['start_date'],
-                    'timeZone': 'Asia/Tokyo',
-                },
-                'end': {
-                    'dateTime': event_data['end_date'],
-                    'timeZone': 'Asia/Tokyo',
-                }
-            }
-            
-            if event_data.get('all_day', False):
-                event['start'] = {'date': event_data['start_date'][:10]}
-                event['end'] = {'date': event_data['end_date'][:10]}
-            
-            updated_event = self.service.events().update(
-                calendarId=calendar_id, eventId=event_id, body=event
-            ).execute()
-            
-            return updated_event
-        except HttpError as e:
-            st.error(f"イベントの更新に失敗しました: {e}")
-            return None
-        except Exception as e:
-            st.error(f"予期しないエラー: {e}")
-            return None
-    
-    def delete_event(self, event_id: str, calendar_id: str = 'primary') -> bool:
-        """イベントを削除"""
-        if not self.service:
-            if not self.authenticate():
-                return False
-        
-        try:
-            self.service.events().delete(
-                calendarId=calendar_id, eventId=event_id
-            ).execute()
-            return True
-        except HttpError as e:
-            st.error(f"イベントの削除に失敗しました: {e}")
-            return False
-        except Exception as e:
-            st.error(f"予期しないエラー: {e}")
-            return False
-    
-    def sync_local_to_google(self, local_events: List[Dict[str, Any]], calendar_id: str = 'primary') -> bool:
-        """ローカルイベントをGoogleカレンダーに同期"""
-        if not self.service:
-            if not self.authenticate():
-                return False
-        
-        try:
-            synced_count = 0
-            for event in local_events:
-                if not event.get('google_id'):  # まだGoogleカレンダーに同期されていない
-                    google_event = self.create_event(event, calendar_id)
-                    if google_event:
-                        event['google_id'] = google_event['id']
-                        synced_count += 1
-            
-            st.success(f"{synced_count}件のイベントをGoogleカレンダーに同期しました。")
-            return True
-        except Exception as e:
-            st.error(f"同期に失敗しました: {e}")
-            return False
-    
-    def sync_google_to_local(self, calendar_id: str = 'primary') -> List[Dict[str, Any]]:
-        """Googleカレンダーからローカルに同期"""
-        if not self.service:
-            if not self.authenticate():
-                return []
-        
-        try:
-            google_events = self.get_events(calendar_id, max_results=50)
-            local_events = []
-            
-            for event in google_events:
-                local_event = {
-                    'id': str(uuid.uuid4()),
-                    'title': event.get('summary', '無題'),
-                    'description': event.get('description', ''),
-                    'start_date': event['start'].get('dateTime', event['start'].get('date')),
-                    'end_date': event['end'].get('dateTime', event['end'].get('date')),
-                    'all_day': 'date' in event['start'],
-                    'category': 'Google同期',
-                    'google_id': event['id']
-                }
-                local_events.append(local_event)
-            
-            return local_events
-        except Exception as e:
-            st.error(f"Googleカレンダーからの同期に失敗しました: {e}")
-            return []
+    def logout(self):
+        """ログアウト"""
+        self.service = None
+        self.credentials = None
+        st.session_state.google_credentials = None
+        st.session_state.google_auth_status = False
+        st.success("ログアウトしました")
+
+
+# グローバル認証マネージャーインスタンス
+_google_auth_manager = None
+
+def get_google_auth_manager() -> GoogleAuthManager:
+    """グローバル認証マネージャーを取得"""
+    global _google_auth_manager
+    if _google_auth_manager is None:
+        _google_auth_manager = GoogleAuthManager()
+    return _google_auth_manager
 
 
 def save_audio_file(audio_data: bytes, filename: str) -> bool:

@@ -36,22 +36,34 @@ try:
         GoogleCalendarManager
     )
     UTILS_AVAILABLE = True
+    st.success("拡張機能が正常に読み込まれました")
 except ImportError as e:
-    print(f"utils_audiorec のインポートに失敗しました: {e}")
+    st.error(f"utils_audiorec のインポートに失敗しました: {e}")
+    st.info("基本機能のみで動作します")
+    UTILS_AVAILABLE = False
+except Exception as e:
+    st.error(f"予期しないエラーが発生しました: {e}")
+    st.info("基本機能のみで動作します")
     UTILS_AVAILABLE = False
 
 try:
     from settings_ui_audiorec import SettingsUI
     SETTINGS_UI_AVAILABLE = True
 except ImportError as e:
-    print(f"settings_ui_audiorec のインポートに失敗しました: {e}")
+    st.warning(f"settings_ui_audiorec のインポートに失敗しました: {e}")
+    SETTINGS_UI_AVAILABLE = False
+except Exception as e:
+    st.warning(f"settings_ui_audiorec で予期しないエラーが発生しました: {e}")
     SETTINGS_UI_AVAILABLE = False
 
 try:
     from config_manager import get_secret, get_google_credentials
     CONFIG_AVAILABLE = True
 except ImportError as e:
-    print(f"config_manager のインポートに失敗しました: {e}")
+    st.warning(f"config_manager のインポートに失敗しました: {e}")
+    CONFIG_AVAILABLE = False
+except Exception as e:
+    st.warning(f"config_manager で予期しないエラーが発生しました: {e}")
     CONFIG_AVAILABLE = False
 
 # 環境変数の読み込み
@@ -572,6 +584,11 @@ def main():
         st.info("ページを再読み込みしてください")
         return
     
+    # 環境情報の表示
+    st.sidebar.write("**環境情報**")
+    st.sidebar.write(f"Python: {sys.version}")
+    st.sidebar.write(f"Streamlit: {st.__version__}")
+    
     # 設定の検証
     if CONFIG_AVAILABLE:
         try:
@@ -582,10 +599,17 @@ def main():
         except Exception as e:
             st.warning(f"設定検証エラー: {e}")
             st.info("設定は後で確認できます")
+    else:
+        st.sidebar.warning("設定管理機能が利用できません")
     
     # アプリケーション実行
-    app = AudioRecorderApp()
-    app.run()
+    try:
+        app = AudioRecorderApp()
+        app.run()
+    except Exception as e:
+        st.error(f"アプリケーション実行エラー: {e}")
+        st.info("ページを再読み込みしてください")
+        st.exception(e)
 
 
 if __name__ == "__main__":
