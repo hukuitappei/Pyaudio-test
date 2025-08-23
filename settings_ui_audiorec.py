@@ -963,9 +963,134 @@ def render_calendar_management_tab():
         render_calendar_sync_tab(auth_manager)
 
 
+def render_calendar_view_tab():
+    """カレンダー表示タブ"""
+    st.write("**📅 カレンダー表示**")
+    
+    # CalendarManagerをインスタンス化
+    calendar_manager = CalendarManager()
+    
+    # 現在の月のカレンダーを表示
+    current_date = datetime.now()
+    year = current_date.year
+    month = current_date.month
+    
+    st.write(f"**{year}年{month}月**")
+    
+    # イベントを読み込み
+    events = calendar_manager.load_events()
+    
+    if events["events"]:
+        # 今月のイベントをフィルター
+        current_month_events = {}
+        for event_id, event in events["events"].items():
+            event_date = datetime.fromisoformat(event["start_date"])
+            if event_date.year == year and event_date.month == month:
+                current_month_events[event_id] = event
+        
+        if current_month_events:
+            st.write("**今月のイベント**")
+            for event_id, event in current_month_events.items():
+                event_date = datetime.fromisoformat(event["start_date"])
+                with st.expander(f"📅 {event_date.strftime('%m/%d')} - {event['title']}"):
+                    st.write(f"**説明**: {event.get('description', '説明なし')}")
+                    st.write(f"**開始**: {event['start_date']}")
+                    st.write(f"**終了**: {event['end_date']}")
+                    st.write(f"**カテゴリ**: {event.get('category', '未分類')}")
+                    if event.get('google_event_id'):
+                        st.write("✅ Googleカレンダーに同期済み")
+        else:
+            st.info("今月のイベントはありません")
+    else:
+        st.info("イベントがありません")
+    
+    # カレンダー表示の設定
+    st.write("### カレンダー設定")
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        show_past_events = st.checkbox("過去のイベントを表示", value=False, key="show_past_events")
+        show_completed_tasks = st.checkbox("完了したタスクを表示", value=False, key="show_completed_tasks")
+    
+    with col2:
+        default_view = st.selectbox("デフォルト表示", ["月", "週", "日"], key="default_calendar_view")
+        auto_refresh = st.checkbox("自動更新", value=True, key="auto_refresh_calendar")
+
+
+def render_event_list_tab():
+    """イベント一覧タブ"""
+    st.write("**📊 イベント一覧**")
+    
+    # CalendarManagerをインスタンス化
+    calendar_manager = CalendarManager()
+    
+    # イベントを読み込み
+    events = calendar_manager.load_events()
+    
+    if not events["events"]:
+        st.info("📅 イベントがありません。新しいイベントを追加してください。")
+        return
+    
+    # フィルター
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        date_filter = st.selectbox("日付", ["全て", "今日", "今週", "今月"], key="event_date_filter")
+    with col2:
+        category_filter = st.selectbox("カテゴリ", ["全て"] + list(set([e.get("category", "未分類") for e in events["events"].values()])), key="event_category_filter")
+    with col3:
+        sync_filter = st.selectbox("同期状態", ["全て", "同期済み", "未同期"], key="event_sync_filter")
+    
+    # イベントを表示
+    for event_id, event in events["events"].items():
+        # フィルター適用
+        event_date = datetime.fromisoformat(event["start_date"])
+        
+        if date_filter == "今日" and event_date.date() != datetime.now().date():
+            continue
+        elif date_filter == "今週":
+            week_start = datetime.now().date() - timedelta(days=datetime.now().weekday())
+            week_end = week_start + timedelta(days=6)
+            if not (week_start <= event_date.date() <= week_end):
+                continue
+        elif date_filter == "今月":
+            if event_date.month != datetime.now().month or event_date.year != datetime.now().year:
+                continue
+        
+        if category_filter != "全て" and event.get("category", "未分類") != category_filter:
+            continue
+        
+        if sync_filter == "同期済み" and not event.get("google_event_id"):
+            continue
+        elif sync_filter == "未同期" and event.get("google_event_id"):
+            continue
+        
+        with st.expander(f"📅 {event_date.strftime('%m/%d %H:%M')} - {event.get('title', 'タイトルなし')}"):
+            col1, col2 = st.columns([3, 1])
+            
+            with col1:
+                st.write(f"**説明**: {event.get('description', '説明なし')}")
+                st.write(f"**開始**: {event['start_date']}")
+                st.write(f"**終了**: {event['end_date']}")
+                st.write(f"**カテゴリ**: {event.get('category', '未分類')}")
+                if event.get('google_event_id'):
+                    st.write("✅ Googleカレンダーに同期済み")
+            
+            with col2:
+                # 削除ボタン
+                if st.button("🗑️ 削除", key=f"delete_event_{event_id}"):
+                    if calendar_manager.delete_event(event_id):
+                        st.success("イベントを削除しました")
+                        st.rerun()
+                    else:
+                        st.error("イベントの削除に失敗しました")
+
+
 def render_event_add_tab(auth_manager):
     """イベント追加タブ"""
     st.write("**➕ イベント追加**")
+    
+    # CalendarManagerをインスタンス化
+    calendar_manager = CalendarManager()
     
     with st.form("add_event_form"):
         title = st.text_input("イベント名", key="event_title")
@@ -1060,6 +1185,9 @@ def render_event_add_tab(auth_manager):
 def render_calendar_sync_tab(auth_manager):
     """カレンダー同期管理タブ"""
     st.write("**🔄 同期管理**")
+    
+    # CalendarManagerをインスタンス化
+    calendar_manager = CalendarManager()
     
     # 認証状態の表示
     if auth_manager.is_authenticated():
