@@ -6,6 +6,7 @@ app_audiorec.py用の統合ユーティリティクラス
 # 標準ライブラリ
 import json
 import os
+import pickle
 import sys
 import uuid
 from datetime import datetime, date, timedelta
@@ -14,6 +15,37 @@ from typing import Dict, Any, List, Optional, Tuple
 # サードパーティライブラリ
 import streamlit as st
 import numpy as np
+
+# Google認証ライブラリ
+try:
+    from google.oauth2.credentials import Credentials
+    from google.auth.transport.requests import Request
+    from google_auth_oauthlib.flow import Flow
+    from googleapiclient.discovery import build
+    GOOGLE_AUTH_AVAILABLE = True
+except ImportError:
+    GOOGLE_AUTH_AVAILABLE = False
+    # フォールバック用のダミークラス
+    class Credentials:
+        def __init__(self, *args, **kwargs):
+            pass
+        @property
+        def expired(self):
+            return True
+        def refresh(self, request):
+            pass
+    class Request:
+        pass
+    class Flow:
+        def __init__(self, *args, **kwargs):
+            pass
+        def authorization_url(self, *args, **kwargs):
+            return "http://example.com", None
+        def fetch_token(self, *args, **kwargs):
+            pass
+    class build:
+        def __init__(self, *args, **kwargs):
+            pass
 
 # OpenAIライブラリ
 try:
@@ -914,6 +946,12 @@ class GoogleAuthManager:
     def __init__(self) -> None:
         self.service = None
         self.credentials: Optional[Credentials] = None
+        
+        # Google認証ライブラリが利用できない場合の処理
+        if not GOOGLE_AUTH_AVAILABLE:
+            st.warning("⚠️ Google認証ライブラリが利用できません。Google認証機能は無効化されます。")
+            return
+        
         self._initialize_session_state()
     
     def _initialize_session_state(self) -> None:
@@ -931,6 +969,10 @@ class GoogleAuthManager:
     
     def authenticate(self) -> bool:
         """Google認証を実行（Streamlit対応）"""
+        if not GOOGLE_AUTH_AVAILABLE:
+            st.error("❌ Google認証ライブラリが利用できません")
+            return False
+        
         try:
             # セッション状態の初期化
             self._initialize_session_state()
@@ -965,6 +1007,9 @@ class GoogleAuthManager:
     
     def _is_credentials_valid(self) -> bool:
         """認証情報の有効性を確認"""
+        if not GOOGLE_AUTH_AVAILABLE:
+            return False
+        
         if not self.credentials:
             return False
         
@@ -981,6 +1026,10 @@ class GoogleAuthManager:
     
     def _create_credentials_from_env(self, client_id: str, client_secret: str) -> Optional[Credentials]:
         """環境変数またはStreamlit Secretsから認証情報を作成"""
+        if not GOOGLE_AUTH_AVAILABLE:
+            st.error("❌ Google認証ライブラリが利用できません")
+            return None
+        
         try:
             # 1. config_managerを使用（推奨）
             refresh_token = get_secret('GOOGLE_REFRESH_TOKEN')
@@ -1022,6 +1071,10 @@ class GoogleAuthManager:
     
     def _handle_initial_auth(self, client_id: str, client_secret: str) -> Optional[Credentials]:
         """初回認証の処理（Streamlit対応）"""
+        if not GOOGLE_AUTH_AVAILABLE:
+            st.error("❌ Google認証ライブラリが利用できません")
+            return None
+        
         st.warning("⚠️ 初回認証が必要です。以下の手順に従ってください：")
         
         # セッション状態の初期化
@@ -1115,6 +1168,10 @@ class GoogleAuthManager:
     
     def _authenticate_from_file(self) -> Optional[Credentials]:
         """ファイルからの認証（フォールバック）"""
+        if not GOOGLE_AUTH_AVAILABLE:
+            st.error("❌ Google認証ライブラリが利用できません")
+            return None
+        
         try:
             if os.path.exists(self.CREDENTIALS_FILE):
                 creds = None
@@ -1174,6 +1231,109 @@ def get_google_auth_manager() -> 'GoogleAuthManager':
     if _google_auth_manager is None:
         _google_auth_manager = GoogleAuthManager()
     return _google_auth_manager
+
+
+class GoogleCalendarManager:
+    """Google Calendar管理クラス"""
+    
+    def __init__(self):
+        self.auth_manager = get_google_auth_manager()
+        self.service = None
+    
+    def authenticate(self) -> bool:
+        """Google認証を実行"""
+        if not GOOGLE_AUTH_AVAILABLE:
+            st.warning("⚠️ Google認証ライブラリが利用できません")
+            return False
+        
+        return self.auth_manager.authenticate()
+    
+    def get_service(self):
+        """Google Calendarサービスを取得"""
+        if not GOOGLE_AUTH_AVAILABLE:
+            return None
+        
+        if self.service:
+            return self.service
+        
+        if self.authenticate():
+            self.service = self.auth_manager.get_service()
+            return self.service
+        
+        return None
+    
+    def is_authenticated(self) -> bool:
+        """認証状態を確認"""
+        if not GOOGLE_AUTH_AVAILABLE:
+            return False
+        
+        return self.auth_manager.is_authenticated()
+    
+    def add_event(self, title: str, description: str = "", start_date: str = None, 
+                  end_date: str = None, category: str = "音声文字起こし") -> bool:
+        """イベントを追加"""
+        if not GOOGLE_AUTH_AVAILABLE:
+            st.warning("⚠️ Google認証ライブラリが利用できません")
+            return False
+        
+        try:
+            service = self.get_service()
+            if not service:
+                return False
+            
+            # イベント作成処理
+            event = {
+                'summary': title,
+                'description': description,
+                'start': {
+                    'dateTime': start_date or datetime.now().isoformat(),
+                    'timeZone': 'Asia/Tokyo',
+                },
+                'end': {
+                    'dateTime': end_date or (datetime.now() + timedelta(hours=1)).isoformat(),
+                    'timeZone': 'Asia/Tokyo',
+                },
+            }
+            
+            event = service.events().insert(calendarId='primary', body=event).execute()
+            st.success(f"✅ イベントを追加しました: {event.get('htmlLink')}")
+            return True
+            
+        except Exception as e:
+            st.error(f"❌ イベント追加エラー: {e}")
+            return False
+    
+    def get_events(self, max_results: int = 10) -> List[Dict[str, Any]]:
+        """イベントを取得"""
+        if not GOOGLE_AUTH_AVAILABLE:
+            return []
+        
+        try:
+            service = self.get_service()
+            if not service:
+                return []
+            
+            now = datetime.utcnow().isoformat() + 'Z'
+            events_result = service.events().list(
+                calendarId='primary', 
+                timeMin=now,
+                maxResults=max_results, 
+                singleEvents=True,
+                orderBy='startTime'
+            ).execute()
+            
+            events = events_result.get('items', [])
+            return events
+            
+        except Exception as e:
+            st.error(f"❌ イベント取得エラー: {e}")
+            return []
+    
+    def logout(self):
+        """ログアウト"""
+        if self.auth_manager:
+            self.auth_manager.logout()
+        self.service = None
 
 
 def record_audio(duration: int = 5, sample_rate: int = 44100, channels: int = 1) -> Optional[np.ndarray]:
