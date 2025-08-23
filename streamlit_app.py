@@ -266,6 +266,27 @@ class AudioRecorderApp:
         tasks = self.analyze_tasks(transcription)
         if tasks:
             st.subheader("📋 検出されたタスク")
+            
+            # タスク自動生成オプション
+            if st.button("📋 タスクとして保存", key="save_tasks_from_transcription"):
+                if self.task_manager:
+                    saved_count = 0
+                    for task in tasks:
+                        if self.task_manager.add_task(
+                            title=task.get('title', '無題'),
+                            description=task.get('description', ''),
+                            priority=task.get('priority', 'medium'),
+                            category='音声文字起こし'
+                        ):
+                            saved_count += 1
+                    
+                    if saved_count > 0:
+                        st.success(f"✅ {saved_count}件のタスクを保存しました")
+                    else:
+                        st.error("❌ タスクの保存に失敗しました")
+                else:
+                    st.error("❌ タスクマネージャーが利用できません")
+            
             for task in tasks:
                 with st.expander(f"タスク: {task.get('title', 'Untitled')}"):
                     st.json(task)
@@ -274,6 +295,28 @@ class AudioRecorderApp:
         events = self.analyze_events(transcription)
         if events:
             st.subheader("📅 検出されたイベント")
+            
+            # イベント自動生成オプション
+            if st.button("📅 イベントとして保存", key="save_events_from_transcription"):
+                if self.calendar_manager:
+                    saved_count = 0
+                    for event in events:
+                        if self.calendar_manager.add_event(
+                            title=event.get('title', '無題'),
+                            description=event.get('description', ''),
+                            start_date=event.get('start_date'),
+                            end_date=event.get('end_date'),
+                            category='音声文字起こし'
+                        ):
+                            saved_count += 1
+                    
+                    if saved_count > 0:
+                        st.success(f"✅ {saved_count}件のイベントを保存しました")
+                    else:
+                        st.error("❌ イベントの保存に失敗しました")
+                else:
+                    st.error("❌ カレンダーマネージャーが利用できません")
+            
             for event in events:
                 with st.expander(f"イベント: {event.get('title', 'Untitled')}"):
                     st.json(event)
