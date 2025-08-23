@@ -946,59 +946,92 @@ class GoogleCalendarManager:
         """初回認証の処理（Streamlit対応）"""
         st.warning("⚠️ 初回認証が必要です。以下の手順に従ってください：")
         
-        # 認証URLを生成
-        try:
-            client_config = {
-                "web": {
-                    "client_id": client_id,
-                    "client_secret": client_secret,
-                    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-                    "token_uri": "https://oauth2.googleapis.com/token",
-                    "redirect_uris": ["urn:ietf:wg:oauth:2.0:oob"]
+        # セッション状態で認証フローを管理
+        if 'google_auth_flow' not in st.session_state:
+            try:
+                client_config = {
+                    "web": {
+                        "client_id": client_id,
+                        "client_secret": client_secret,
+                        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                        "token_uri": "https://oauth2.googleapis.com/token",
+                        "redirect_uris": ["urn:ietf:wg:oauth:2.0:oob"]
+                    }
                 }
-            }
-            
-            flow = Flow.from_client_config(
-                client_config,
-                scopes=self.SCOPES,
-                redirect_uri="urn:ietf:wg:oauth:2.0:oob"
-            )
-            
-            auth_url, _ = flow.authorization_url(prompt='consent')
-            
-            st.info("📋 認証手順:")
-            st.markdown(f"1. [この認証URL]({auth_url})をクリック")
-            st.markdown("2. Googleアカウントでログインし、権限を許可")
-            st.markdown("3. 表示された認証コードを下のフィールドに入力")
-            
-            # 認証コード入力
-            auth_code = st.text_input("認証コードを入力してください:", key="google_auth_code")
-            
-            if auth_code and st.button("認証を完了", key="complete_google_auth"):
-                try:
-                    flow.fetch_token(code=auth_code)
-                    creds = flow.credentials
+                
+                flow = Flow.from_client_config(
+                    client_config,
+                    scopes=self.SCOPES,
+                    redirect_uri="urn:ietf:wg:oauth:2.0:oob"
+                )
+                
+                auth_url, _ = flow.authorization_url(prompt='consent')
+                
+                # セッション状態に保存
+                st.session_state.google_auth_flow = flow
+                st.session_state.google_auth_url = auth_url
+                st.session_state.google_auth_key = uuid.uuid4().hex[:8]
+                
+            except Exception as e:
+                st.error(f"認証フローの初期化に失敗しました: {e}")
+                return None
+        
+        # 認証URLの表示
+        st.info("📋 認証手順:")
+        st.markdown(f"1. [この認証URL]({st.session_state.google_auth_url})をクリック")
+        st.markdown("2. Googleアカウントでログインし、権限を許可")
+        st.markdown("3. 表示された認証コードを下のフィールドに入力")
+        
+        # 認証フローをリセットするボタン
+        if st.button("🔄 認証フローをリセット", key=f"reset_auth_flow_{st.session_state.google_auth_key}"):
+            if 'google_auth_flow' in st.session_state:
+                del st.session_state.google_auth_flow
+            if 'google_auth_url' in st.session_state:
+                del st.session_state.google_auth_url
+            if 'google_auth_key' in st.session_state:
+                del st.session_state.google_auth_key
+            st.rerun()
+        
+        # 認証コード入力（固定キーを使用）
+        auth_code = st.text_input(
+            "認証コードを入力してください:", 
+            key=f"google_auth_code_{st.session_state.google_auth_key}"
+        )
+        
+        if auth_code and st.button(
+            "認証を完了", 
+            key=f"complete_google_auth_{st.session_state.google_auth_key}"
+        ):
+            try:
+                flow = st.session_state.google_auth_flow
+                flow.fetch_token(code=auth_code)
+                creds = flow.credentials
+                
+                # リフレッシュトークンを表示（ユーザーが環境変数に設定するため）
+                if creds.refresh_token:
+                    st.success("✅ 認証が完了しました！")
+                    st.info("以下のリフレッシュトークンを.envファイルのGOOGLE_REFRESH_TOKENに設定してください:")
+                    st.code(creds.refresh_token)
                     
-                    # リフレッシュトークンを表示（ユーザーが環境変数に設定するため）
-                    if creds.refresh_token:
-                        st.success("✅ 認証が完了しました！")
-                        st.info("以下のリフレッシュトークンを.envファイルのGOOGLE_REFRESH_TOKENに設定してください:")
-                        st.code(creds.refresh_token)
-                        
-                        # セッション状態に保存
-                        st.session_state.google_credentials = creds
-                        return creds
-                    else:
-                        st.error("❌ リフレッシュトークンの取得に失敗しました")
-                        
-                except Exception as e:
-                    st.error(f"❌ 認証コードの処理に失敗しました: {e}")
-            
-            return None
-            
-        except Exception as e:
-            st.error(f"認証フローの初期化に失敗しました: {e}")
-            return None
+                    # セッション状態に保存
+                    st.session_state.google_credentials = creds
+                    
+                    # 認証フローをクリア
+                    if 'google_auth_flow' in st.session_state:
+                        del st.session_state.google_auth_flow
+                    if 'google_auth_url' in st.session_state:
+                        del st.session_state.google_auth_url
+                    if 'google_auth_key' in st.session_state:
+                        del st.session_state.google_auth_key
+                    
+                    return creds
+                else:
+                    st.error("❌ リフレッシュトークンの取得に失敗しました")
+                    
+            except Exception as e:
+                st.error(f"❌ 認証コードの処理に失敗しました: {e}")
+        
+        return None
     
     def _authenticate_from_file(self) -> Optional[Credentials]:
         """ファイルベースの認証（開発用・Streamlit非対応）"""
