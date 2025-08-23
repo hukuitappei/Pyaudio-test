@@ -631,26 +631,30 @@ def render_task_list_tab():
     with col1:
         status_filter = st.selectbox("ステータス", ["全て", "pending", "completed"], key="task_status_filter")
     with col2:
-        priority_filter = st.selectbox("優先度", ["全て"] + tasks["priorities"], key="task_priority_filter")
+        # prioritiesキーの存在チェック
+        priorities = tasks.get("priorities", ["低", "中", "高", "緊急"])
+        priority_filter = st.selectbox("優先度", ["全て"] + priorities, key="task_priority_filter")
     with col3:
-        category_filter = st.selectbox("カテゴリ", ["全て"] + tasks["categories"], key="task_category_filter")
+        # categoriesキーの存在チェック
+        categories = tasks.get("categories", ["仕事", "プライベート", "勉強", "健康", "その他"])
+        category_filter = st.selectbox("カテゴリ", ["全て"] + categories, key="task_category_filter")
     
     # タスクを表示
     for task_id, task in tasks["tasks"].items():
         # フィルター適用
         if status_filter != "全て" and task["status"] != status_filter:
             continue
-        if priority_filter != "全て" and task["priority"] != priority_filter:
+        if priority_filter != "全て" and task.get("priority", "中") != priority_filter:
             continue
-        if category_filter != "全て" and task["category"] != category_filter:
+        if category_filter != "全て" and task.get("category", "未分類") != category_filter:
             continue
         
-        with st.expander(f"📋 {task['title']} ({task['priority']})"):
+        with st.expander(f"📋 {task.get('title', 'タイトルなし')} ({task.get('priority', '中')})"):
             col1, col2 = st.columns([3, 1])
             
             with col1:
-                st.write(f"**説明**: {task['description']}")
-                st.write(f"**カテゴリ**: {task['category']}")
+                st.write(f"**説明**: {task.get('description', '説明なし')}")
+                st.write(f"**カテゴリ**: {task.get('category', '未分類')}")
                 st.write(f"**ステータス**: {task['status']}")
                 if task.get('due_date'):
                     st.write(f"**期限**: {task['due_date']}")
@@ -867,7 +871,7 @@ def render_task_settings_tab():
     st.write("### カテゴリ別統計")
     category_stats = {}
     for task in tasks["tasks"].values():
-        category = task["category"]
+        category = task.get("category", "未分類")
         if category not in category_stats:
             category_stats[category] = {"pending": 0, "completed": 0}
         category_stats[category][task["status"]] += 1
@@ -879,7 +883,7 @@ def render_task_settings_tab():
     st.write("### 優先度別統計")
     priority_stats = {}
     for task in tasks["tasks"].values():
-        priority = task["priority"]
+        priority = task.get("priority", "中")
         if priority not in priority_stats:
             priority_stats[priority] = {"pending": 0, "completed": 0}
         priority_stats[priority][task["status"]] += 1
