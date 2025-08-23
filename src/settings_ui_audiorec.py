@@ -1194,7 +1194,7 @@ def render_calendar_sync_tab(auth_manager):
         st.success("✅ Googleカレンダー認証済み")
     else:
         st.warning("⚠️ Googleカレンダーが認証されていません")
-        if st.button("🔐 Googleカレンダー認証"):
+        if st.button("🔐 Googleカレンダー認証", key=f"google_auth_button_{uuid.uuid4().hex[:8]}"):
             if auth_manager.authenticate():
                 st.success("✅ 認証が完了しました")
                 st.rerun()
@@ -1232,7 +1232,7 @@ def render_calendar_sync_tab(auth_manager):
         
         # 一括同期
         st.write("### 一括操作")
-        if st.button("📅 未同期イベントを一括同期"):
+        if st.button("📅 未同期イベントを一括同期", key=f"bulk_sync_events_{uuid.uuid4().hex[:8]}"):
             service = auth_manager.get_service()
             if service:
                 synced_count = 0

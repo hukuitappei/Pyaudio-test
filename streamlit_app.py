@@ -24,7 +24,7 @@ from st_audiorec import st_audiorec
 
 # 拡張機能のインポート
 try:
-    from utils_audiorec import (
+    from src.utils_audiorec import (
         EnhancedSettingsManager, 
         UserDictionaryManager, 
         CommandManager, 
@@ -53,7 +53,7 @@ except Exception as e:
     OPENAI_AVAILABLE = False
 
 try:
-    from settings_ui_audiorec import SettingsUI
+    from src.settings_ui_audiorec import SettingsUI
     SETTINGS_UI_AVAILABLE = True
 except ImportError as e:
     st.warning(f"settings_ui_audiorec のインポートに失敗しました: {e}")
@@ -63,7 +63,7 @@ except Exception as e:
     SETTINGS_UI_AVAILABLE = False
 
 try:
-    from config_manager import get_secret, get_google_credentials
+    from config.config_manager import get_secret, get_google_credentials
     CONFIG_AVAILABLE = True
 except ImportError as e:
     st.warning(f"config_manager のインポートに失敗しました: {e}")
