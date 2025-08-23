@@ -129,13 +129,7 @@ except ImportError:
             pass
         return default
     
-    def get_google_credentials():
-        """フォールバック用のGoogle認証情報取得関数"""
-        return None
-    
-    def is_streamlit_cloud():
-        """フォールバック用のStreamlit Cloud判定関数"""
-        return True
+    # フォールバック用の関数は削除（config_managerから正しくインポート）
 
 
 class EnhancedSettingsManager:
@@ -1032,7 +1026,12 @@ class GoogleAuthManager:
                     return True
             
             # 環境変数またはStreamlit Secretsから認証情報を取得
-            client_id, client_secret, _ = get_google_credentials()
+            credentials = get_google_credentials()
+            if credentials is None:
+                st.error("Google認証情報が取得できませんでした")
+                return False
+            
+            client_id, client_secret, _ = credentials
             
             if client_id and client_secret:
                 creds = self._create_credentials_from_env(client_id, client_secret)
@@ -1159,9 +1158,14 @@ class GoogleAuthManager:
         
         # 認証URLの表示
         st.info("📋 認証手順:")
-        st.markdown(f"1. [この認証URL]({st.session_state.google_auth_url})をクリック")
-        st.markdown("2. Googleアカウントでログインし、権限を許可")
-        st.markdown("3. 表示された認証コードを下のフィールドに入力")
+        st.markdown("1. 以下の認証URLをクリックしてGoogle認証画面を開いてください:")
+        st.markdown(f"**認証URL**: {st.session_state.google_auth_url}")
+        st.markdown("2. Googleアカウントでログインし、権限を許可してください")
+        st.markdown("3. 表示された認証コードを下のフィールドに入力してください")
+        
+        # 認証URLをクリック可能なボタンとして表示
+        if st.button("🔗 Google認証画面を開く", key=f"open_auth_url_{st.session_state.google_auth_key}"):
+            st.markdown(f"[Google認証画面を開く]({st.session_state.google_auth_url})")
         
         # 認証フローをリセットするボタン
         if st.button("🔄 認証フローをリセット", key=f"reset_auth_flow_{st.session_state.google_auth_key}"):
