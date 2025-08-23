@@ -612,6 +612,72 @@ def render_task_management_tab():
         render_task_settings_tab()
 
 
+def render_task_list_tab():
+    """タスク一覧タブ"""
+    st.write("**📝 タスク一覧**")
+    
+    # タスクを読み込み
+    tasks = task_manager.load_tasks()
+    
+    if not tasks["tasks"]:
+        st.info("📝 タスクがありません。新しいタスクを追加してください。")
+        return
+    
+    # フィルター
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        status_filter = st.selectbox("ステータス", ["全て", "pending", "completed"], key="task_status_filter")
+    with col2:
+        priority_filter = st.selectbox("優先度", ["全て"] + tasks["priorities"], key="task_priority_filter")
+    with col3:
+        category_filter = st.selectbox("カテゴリ", ["全て"] + tasks["categories"], key="task_category_filter")
+    
+    # タスクを表示
+    for task_id, task in tasks["tasks"].items():
+        # フィルター適用
+        if status_filter != "全て" and task["status"] != status_filter:
+            continue
+        if priority_filter != "全て" and task["priority"] != priority_filter:
+            continue
+        if category_filter != "全て" and task["category"] != category_filter:
+            continue
+        
+        with st.expander(f"📋 {task['title']} ({task['priority']})"):
+            col1, col2 = st.columns([3, 1])
+            
+            with col1:
+                st.write(f"**説明**: {task['description']}")
+                st.write(f"**カテゴリ**: {task['category']}")
+                st.write(f"**ステータス**: {task['status']}")
+                if task.get('due_date'):
+                    st.write(f"**期限**: {task['due_date']}")
+                if task.get('google_event_id'):
+                    st.write("✅ Googleカレンダーに同期済み")
+            
+            with col2:
+                # ステータス変更
+                new_status = st.selectbox(
+                    "ステータス変更", 
+                    ["pending", "completed"], 
+                    index=0 if task["status"] == "pending" else 1,
+                    key=f"status_{task_id}"
+                )
+                
+                if new_status != task["status"]:
+                    if st.button("更新", key=f"update_status_{task_id}"):
+                        task_manager.update_task(task_id, status=new_status)
+                        st.success("ステータスを更新しました")
+                        st.rerun()
+                
+                # 削除ボタン
+                if st.button("🗑️ 削除", key=f"delete_task_{task_id}"):
+                    if task_manager.delete_task(task_id):
+                        st.success("タスクを削除しました")
+                        st.rerun()
+                    else:
+                        st.error("タスクの削除に失敗しました")
+
+
 def render_task_add_tab(auth_manager):
     """タスク追加タブ"""
     st.write("**➕ タスク追加**")
@@ -765,6 +831,92 @@ def render_task_calendar_sync_tab(auth_manager):
                 st.error("❌ Googleカレンダーサービスに接続できません")
     else:
         st.info("タスクがありません")
+
+
+def render_task_settings_tab():
+    """タスク設定タブ"""
+    st.write("**⚙️ タスク設定**")
+    
+    # タスク統計
+    tasks = task_manager.load_tasks()
+    total_tasks = len(tasks["tasks"])
+    pending_tasks = len([t for t in tasks["tasks"].values() if t["status"] == "pending"])
+    completed_tasks = len([t for t in tasks["tasks"].values() if t["status"] == "completed"])
+    
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("総タスク数", total_tasks)
+    with col2:
+        st.metric("未完了", pending_tasks)
+    with col3:
+        st.metric("完了", completed_tasks)
+    
+    # カテゴリ別統計
+    st.write("### カテゴリ別統計")
+    category_stats = {}
+    for task in tasks["tasks"].values():
+        category = task["category"]
+        if category not in category_stats:
+            category_stats[category] = {"pending": 0, "completed": 0}
+        category_stats[category][task["status"]] += 1
+    
+    for category, stats in category_stats.items():
+        st.write(f"**{category}**: 未完了 {stats['pending']}件, 完了 {stats['completed']}件")
+    
+    # 優先度別統計
+    st.write("### 優先度別統計")
+    priority_stats = {}
+    for task in tasks["tasks"].values():
+        priority = task["priority"]
+        if priority not in priority_stats:
+            priority_stats[priority] = {"pending": 0, "completed": 0}
+        priority_stats[priority][task["status"]] += 1
+    
+    for priority, stats in priority_stats.items():
+        st.write(f"**{priority}**: 未完了 {stats['pending']}件, 完了 {stats['completed']}件")
+    
+    # 設定オプション
+    st.write("### 設定オプション")
+    
+    # 自動同期設定
+    auto_sync = st.checkbox("Googleカレンダーに自動同期", value=False, key="task_auto_sync")
+    if auto_sync:
+        st.info("💡 新しいタスクが追加された際に自動的にGoogleカレンダーに同期されます")
+    
+    # 通知設定
+    enable_notifications = st.checkbox("期限通知を有効にする", value=True, key="task_notifications")
+    if enable_notifications:
+        notification_days = st.slider("何日前に通知", 1, 7, 3, key="task_notification_days")
+        st.info(f"💡 期限の{notification_days}日前に通知されます")
+    
+    # データ管理
+    st.write("### データ管理")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("🗑️ 完了タスクを削除"):
+            completed_task_ids = [task_id for task_id, task in tasks["tasks"].items() 
+                                if task["status"] == "completed"]
+            deleted_count = 0
+            for task_id in completed_task_ids:
+                if task_manager.delete_task(task_id):
+                    deleted_count += 1
+            st.success(f"✅ {deleted_count}件の完了タスクを削除しました")
+            st.rerun()
+    
+    with col2:
+        if st.button("📊 タスクデータをエクスポート"):
+            # タスクデータをJSON形式でエクスポート
+            export_data = {
+                "export_date": datetime.now().isoformat(),
+                "tasks": tasks["tasks"]
+            }
+            st.download_button(
+                label="📥 ダウンロード",
+                data=json.dumps(export_data, ensure_ascii=False, indent=2),
+                file_name=f"tasks_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
+                mime="application/json"
+            )
 
 
 def render_calendar_management_tab():
