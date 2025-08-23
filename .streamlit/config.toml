@@ -2,6 +2,8 @@
 headless = true
 enableCORS = false
 enableXsrfProtection = false
+maxUploadSize = 200
+maxMessageSize = 200
 
 [browser]
 gatherUsageStats = false
@@ -11,3 +13,16 @@ primaryColor = "#1f77b4"
 backgroundColor = "#ffffff"
 secondaryBackgroundColor = "#f0f2f6"
 textColor = "#262730"
+
+[client]
+showErrorDetails = true
+toolbarMode = "minimal"
+
+[runner]
+magicEnabled = false
+installTracer = false
+fixMatplotlib = true
+
+[logger]
+level = "info"
+messageFormat = "%(asctime)s %(message)s"

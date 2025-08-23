@@ -8,7 +8,9 @@ import base64
 import io
 import json
 import os
+import sys
 import tempfile
+import traceback
 import wave
 from datetime import datetime, date
 from typing import Optional, List, Dict, Any
@@ -547,20 +549,29 @@ class AudioRecorderApp:
 
 def main():
     """メイン関数"""
-    # Streamlit設定
-    st.set_page_config(
-        page_title="音声録音・文字起こしアプリ",
-        page_icon="🎙️",
-        layout="wide",
-        initial_sidebar_state="expanded"
-    )
+    # WebSocket接続エラーのハンドリング
+    try:
+        st.set_page_config(
+            page_title="音声録音・文字起こしアプリ",
+            page_icon="🎙️",
+            layout="wide",
+            initial_sidebar_state="expanded"
+        )
+    except Exception as e:
+        st.error(f"ページ設定エラー: {e}")
+        st.info("ページを再読み込みしてください")
+        return
     
     # 設定の検証
     if CONFIG_AVAILABLE:
-        from config_manager import validate_secrets, show_environment_info
-        if not validate_secrets():
-            st.stop()
-        show_environment_info()
+        try:
+            from config_manager import validate_secrets, show_environment_info
+            if not validate_secrets():
+                st.warning("設定に問題がありますが、アプリケーションは続行します")
+            show_environment_info()
+        except Exception as e:
+            st.warning(f"設定検証エラー: {e}")
+            st.info("設定は後で確認できます")
     
     # アプリケーション実行
     app = AudioRecorderApp()
