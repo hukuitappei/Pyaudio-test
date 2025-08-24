@@ -661,6 +661,7 @@ class AudioRecorderApp:
         elif page == "コマンド管理":
             if self.settings_ui:
                 self.settings_ui.display_command_management_page()
+                
             else:
                 st.error("コマンド管理UIが利用できません。settings_ui_audiorec.pyの読み込みに失敗しました。")
         elif page == "タスク管理":
