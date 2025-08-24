@@ -1162,9 +1162,9 @@ def render_event_add_tab(auth_manager):
         
         if submitted and title:
             # 認証状態を確認
-            if sync_to_calendar and not auth_manager.is_authenticated():
+            if sync_to_calendar and (not auth_manager or not auth_manager.is_authenticated()):
                 st.error("Googleカレンダーに同期するには認証が必要です")
-                st.info("設定タブでGoogleカレンダー認証を実行してください")
+                st.info("カレンダー連携タブでGoogleカレンダー認証を実行してください")
                 return
             
             # 日時を結合
@@ -1239,16 +1239,64 @@ def render_calendar_sync_tab(auth_manager):
     calendar_manager = CalendarManager()
     
     # 認証状態の表示
-    if auth_manager.is_authenticated():
+    if not auth_manager:
+        st.error("❌ Google認証マネージャーが利用できません")
+        st.info("Google認証ライブラリが正しくインストールされているか確認してください")
+    elif auth_manager.is_authenticated():
         st.success("✅ Googleカレンダー認証済み")
     else:
         st.warning("⚠️ Googleカレンダーが認証されていません")
+        
+        # 認証情報の設定状況を表示
+        try:
+            from config.config_manager import check_google_credentials
+            credentials_status = check_google_credentials()
+            
+            st.info("🔍 認証情報の設定状況:")
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                if credentials_status['client_id']['exists']:
+                    st.success("✅ Client ID")
+                else:
+                    st.error("❌ Client ID")
+            
+            with col2:
+                if credentials_status['client_secret']['exists']:
+                    st.success("✅ Client Secret")
+                else:
+                    st.error("❌ Client Secret")
+            
+            with col3:
+                if credentials_status['refresh_token']['exists']:
+                    st.success("✅ Refresh Token")
+                else:
+                    st.warning("⚠️ Refresh Token")
+        except Exception as e:
+            st.warning(f"認証情報の確認に失敗しました: {e}")
+        
+        # Google認証ボタン
         if st.button("🔐 Googleカレンダー認証", key=f"google_auth_button_{uuid.uuid4().hex[:8]}"):
-            if auth_manager.authenticate():
-                st.success("✅ 認証が完了しました")
-                st.rerun()
-            else:
-                st.error("❌ 認証に失敗しました")
+            try:
+                if not auth_manager:
+                    st.error("❌ 認証マネージャーが利用できません")
+                    st.info("Google認証ライブラリが正しくインストールされているか確認してください")
+                    return
+                
+                st.info("🔄 認証を開始しています...")
+                auth_result = auth_manager.authenticate()
+                if auth_result:
+                    st.success("✅ 認証が完了しました")
+                    st.info("ページを再読み込みして認証状態を確認してください")
+                    st.rerun()
+                else:
+                    st.error("❌ 認証に失敗しました")
+                    st.info("認証情報が正しく設定されているか確認してください")
+                    st.info("初回認証の場合は、認証URLをクリックしてGoogle認証画面を開いてください")
+            except Exception as e:
+                st.error(f"❌ 認証エラー: {e}")
+                st.info("認証情報の設定を確認してください")
+                st.exception(e)
         return
     
     # イベント一覧表示
