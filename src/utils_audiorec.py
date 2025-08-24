@@ -129,7 +129,12 @@ except ImportError:
             pass
         return default
     
-    # フォールバック用の関数は削除（config_managerから正しくインポート）
+    def get_google_credentials():
+        """フォールバック用のGoogle認証情報取得関数"""
+        client_id = get_secret('GOOGLE_CLIENT_ID')
+        client_secret = get_secret('GOOGLE_CLIENT_SECRET') 
+        refresh_token = get_secret('GOOGLE_REFRESH_TOKEN')
+        return client_id, client_secret, refresh_token
 
 
 class EnhancedSettingsManager:
@@ -1332,9 +1337,13 @@ def get_google_auth_manager() -> 'GoogleAuthManager':
 class GoogleCalendarManager:
     """Google Calendar管理クラス"""
     
+    SCOPES = ['https://www.googleapis.com/auth/calendar']
+    CREDENTIALS_FILE = 'credentials.json'
+    TOKEN_FILE = 'token.pickle'
+    
     def __init__(self):
-        self.auth_manager = get_google_auth_manager()
         self.service = None
+        self.credentials = None
     
     def authenticate(self) -> bool:
         """Google認証を実行（Streamlit対応）"""
@@ -1651,7 +1660,7 @@ class GoogleCalendarManager:
         if not GOOGLE_AUTH_AVAILABLE:
             return False
         
-        return self.auth_manager.is_authenticated()
+        return st.session_state.get('google_auth_status', False) and self._is_credentials_valid()
     
     def add_event(self, title: str, description: str = "", start_date: str = None, 
                   end_date: str = None, category: str = "音声文字起こし") -> bool:
@@ -1715,9 +1724,11 @@ class GoogleCalendarManager:
     
     def logout(self):
         """ログアウト"""
-        if self.auth_manager:
-            self.auth_manager.logout()
         self.service = None
+        self.credentials = None
+        st.session_state.google_credentials = None
+        st.session_state.google_auth_status = False
+        st.success("ログアウトしました")
 
 
 def record_audio(duration: int = 5, sample_rate: int = 44100, channels: int = 1) -> Optional[np.ndarray]:

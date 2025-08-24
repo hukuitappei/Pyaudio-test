@@ -95,9 +95,11 @@ except Exception as e:
     CONFIG_AVAILABLE = False
 
 # 設定確認機能の追加
+CONFIG_UI_AVAILABLE = False
+show_environment_info = None
 if CONFIG_AVAILABLE:
     try:
-        from config.config_manager import show_google_credentials_status, show_environment_info
+        from config.config_manager import show_environment_info
         CONFIG_UI_AVAILABLE = True
     except ImportError as e:
         st.warning(f"設定確認機能のインポートに失敗しました: {e}")
@@ -105,8 +107,6 @@ if CONFIG_AVAILABLE:
     except Exception as e:
         st.warning(f"設定確認機能で予期しないエラーが発生しました: {e}")
         CONFIG_UI_AVAILABLE = False
-else:
-    CONFIG_UI_AVAILABLE = False
 
 # 環境変数の読み込み
 load_dotenv()
@@ -149,6 +149,7 @@ class AudioRecorderApp:
     
     def _initialize_session_state(self):
         """セッション状態の初期化"""
+        # 基本状態
         if 'audio_data' not in st.session_state:
             st.session_state.audio_data = None
         if 'transcription' not in st.session_state:
@@ -159,6 +160,8 @@ class AudioRecorderApp:
             st.session_state.google_authenticated = False
         if 'current_page' not in st.session_state:
             st.session_state.current_page = "メイン"
+        if 'transcription_timestamp' not in st.session_state:
+            st.session_state.transcription_timestamp = None
         
         # Google認証関連のセッション状態初期化
         if 'google_auth_url' not in st.session_state:
@@ -169,6 +172,8 @@ class AudioRecorderApp:
             st.session_state.google_auth_key = None
         if 'google_credentials' not in st.session_state:
             st.session_state.google_credentials = None
+        if 'google_auth_status' not in st.session_state:
+            st.session_state.google_auth_status = False
     
     def setup_openai(self) -> Optional[openai.OpenAI]:
         """OpenAI APIの設定"""
@@ -255,11 +260,14 @@ class AudioRecorderApp:
     
     def save_transcription(self, transcription: str, timestamp: str) -> str:
         """文字起こし結果を保存"""
-        os.makedirs("transcriptions", exist_ok=True)
-        filename = f"transcription_{timestamp}.txt"
-        filepath = os.path.join("transcriptions", filename)
-        
         try:
+            # 絶対パスでディレクトリ作成
+            transcriptions_dir = os.path.join(os.getcwd(), "transcriptions")
+            os.makedirs(transcriptions_dir, exist_ok=True)
+            
+            filename = f"transcription_{timestamp}.txt"
+            filepath = os.path.join(transcriptions_dir, filename)
+            
             with open(filepath, "w", encoding="utf-8") as f:
                 f.write(f"文字起こし結果 - {timestamp}\n")
                 f.write("="*50 + "\n")
@@ -271,11 +279,14 @@ class AudioRecorderApp:
     
     def save_audio_file(self, audio_data: bytes, timestamp: str) -> str:
         """音声ファイルを保存"""
-        os.makedirs("recordings", exist_ok=True)
-        filename = f"recording_{timestamp}.wav"
-        filepath = os.path.join("recordings", filename)
-        
         try:
+            # 絶対パスでディレクトリ作成
+            recordings_dir = os.path.join(os.getcwd(), "recordings")
+            os.makedirs(recordings_dir, exist_ok=True)
+            
+            filename = f"recording_{timestamp}.wav"
+            filepath = os.path.join(recordings_dir, filename)
+            
             with open(filepath, "wb") as f:
                 f.write(audio_data)
             return filepath
@@ -680,30 +691,40 @@ def main():
         return
     
     # 環境情報の表示
-    st.sidebar.write("**環境情報**")
-    st.sidebar.write(f"Python: {sys.version}")
-    st.sidebar.write(f"Streamlit: {st.__version__}")
+    try:
+        st.sidebar.write("**環境情報**")
+        st.sidebar.write(f"Python: {sys.version}")
+        st.sidebar.write(f"Streamlit: {st.__version__}")
+    except Exception as e:
+        st.sidebar.warning(f"環境情報の表示エラー: {e}")
     
     # 音声処理ライブラリの状況表示
-    if UTILS_AVAILABLE:
-        try:
-            from src.utils_audiorec import show_audio_library_status
-            show_audio_library_status()
-        except Exception as e:
-            st.sidebar.warning(f"音声処理ライブラリ状況の表示エラー: {e}")
-    else:
-        st.sidebar.warning("音声処理ライブラリ状況が確認できません")
+    try:
+        if UTILS_AVAILABLE:
+            try:
+                from src.utils_audiorec import show_audio_library_status
+                show_audio_library_status()
+            except Exception as e:
+                st.sidebar.warning(f"音声処理ライブラリ状況の表示エラー: {e}")
+        else:
+            st.sidebar.warning("音声処理ライブラリ状況が確認できません")
+    except Exception as e:
+        st.sidebar.warning(f"音声処理ライブラリ状況の確認エラー: {e}")
     
     # 設定の検証
-    if CONFIG_AVAILABLE:
-        try:
-            from config.config_manager import show_environment_info
-            show_environment_info()
-        except Exception as e:
-            st.warning(f"設定検証エラー: {e}")
-            st.info("設定は後で確認できます")
-    else:
-        st.sidebar.warning("設定管理機能が利用できません")
+    try:
+        if CONFIG_AVAILABLE and CONFIG_UI_AVAILABLE and show_environment_info:
+            try:
+                show_environment_info()
+            except Exception as e:
+                st.warning(f"設定検証エラー: {e}")
+                st.info("設定は後で確認できます")
+        elif CONFIG_AVAILABLE:
+            st.sidebar.warning("設定確認機能が利用できません")
+        else:
+            st.sidebar.warning("設定管理機能が利用できません")
+    except Exception as e:
+        st.sidebar.warning(f"設定検証の初期化エラー: {e}")
     
     # アプリケーション実行
     try:

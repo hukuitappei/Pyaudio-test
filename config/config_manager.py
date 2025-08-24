@@ -191,7 +191,10 @@ def show_environment_info() -> None:
     st.markdown("### 設定状況")
     
     # Google認証情報の状況を表示
-    show_google_credentials_status()
+    try:
+        show_google_credentials_status()
+    except Exception as e:
+        st.warning(f"Google認証情報の表示に失敗しました: {e}")
     
     # OpenAI APIキーの状況
     openai_key = get_openai_api_key()
