@@ -6,6 +6,7 @@ app_audiorec.py用の拡張設定UIコンポーネント
 # 標準ライブラリ
 import json
 import os
+import sys
 import uuid
 from datetime import datetime, date, timedelta
 from typing import Dict, Any, List, Optional
@@ -1394,10 +1395,80 @@ class SettingsUI:
     
     def display_settings_page(self):
         """設定ページ表示"""
+        st.title("⚙️ 設定")
+        
+        # 環境情報とGoogle認証情報の表示
+        self._display_environment_and_auth_info()
+        
+        # 設定タブの表示
         if UTILS_AUDIOREC_AVAILABLE:
             render_enhanced_settings_tab(self.settings_manager)
         else:
             st.warning("設定機能は現在利用できません")
+    
+    def _display_environment_and_auth_info(self):
+        """環境情報とGoogle認証情報の設定状況を表示"""
+        st.subheader("🌍 環境情報")
+        
+        # 基本環境情報
+        col1, col2 = st.columns(2)
+        with col1:
+            st.write(f"**Python**: {sys.version}")
+            st.write(f"**Streamlit**: {st.__version__}")
+        
+        with col2:
+            st.write(f"**OS**: {os.name}")
+            st.write(f"**作業ディレクトリ**: {os.getcwd()}")
+        
+        # Google認証情報の設定状況
+        st.subheader("🔐 Google認証情報の設定状況")
+        
+        try:
+            # config_managerから認証情報を取得
+            from config.config_manager import get_secret, check_google_credentials
+            
+            # 認証情報の確認
+            client_id = get_secret('GOOGLE_CLIENT_ID')
+            client_secret = get_secret('GOOGLE_CLIENT_SECRET')
+            refresh_token = get_secret('GOOGLE_REFRESH_TOKEN')
+            
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                if client_id:
+                    st.success("✅ GOOGLE_CLIENT_ID: 設定済み")
+                else:
+                    st.error("❌ GOOGLE_CLIENT_ID: 未設定")
+            
+            with col2:
+                if client_secret:
+                    st.success("✅ GOOGLE_CLIENT_SECRET: 設定済み")
+                else:
+                    st.error("❌ GOOGLE_CLIENT_SECRET: 未設定")
+            
+            with col3:
+                if refresh_token:
+                    st.success("✅ GOOGLE_REFRESH_TOKEN: 設定済み")
+                else:
+                    st.warning("⚠️ GOOGLE_REFRESH_TOKEN: 未設定")
+            
+            # 詳細な認証情報チェック
+            if hasattr(check_google_credentials, '__call__'):
+                try:
+                    auth_status = check_google_credentials()
+                    if auth_status:
+                        st.success("✅ Google認証情報の検証: 成功")
+                    else:
+                        st.error("❌ Google認証情報の検証: 失敗")
+                except Exception as e:
+                    st.warning(f"⚠️ Google認証情報の検証エラー: {e}")
+            
+        except ImportError:
+            st.warning("⚠️ config_managerが利用できません")
+        except Exception as e:
+            st.error(f"❌ 認証情報の確認エラー: {e}")
+        
+        st.divider()
     
     def display_user_dictionary_page(self):
         """ユーザー辞書ページ表示"""

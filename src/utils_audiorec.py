@@ -1756,8 +1756,23 @@ def record_audio(duration: int = 5, sample_rate: int = 44100, channels: int = 1)
     """音声録音機能（Streamlit Cloud対応）"""
     
     if not PYAUDIO_AVAILABLE:
-        st.warning("Streamlit Cloud環境では直接録音は利用できません")
-        st.info("代わりにstreamlit-audiorecコンポーネントを使用してください")
+        st.warning("⚠️ 直接録音機能は利用できません")
+        st.info("💡 以下の方法で音声を録音してください:")
+        st.info("1. ブラウザの録音機能を使用")
+        st.info("2. 外部アプリで録音してファイルをアップロード")
+        st.info("3. 音声ファイルを直接アップロード")
+        
+        # 代替案としてダミーデータを生成（テスト用）
+        if st.button("🎵 テスト用音声データを生成"):
+            st.info("テスト用の正弦波音声データを生成します...")
+            t = np.linspace(0, duration, int(sample_rate * duration), False)
+            # 440Hzの正弦波
+            test_audio = np.sin(2 * np.pi * 440 * t) * 0.3
+            # 16-bit整数に変換
+            test_audio = (test_audio * 32767).astype(np.int16)
+            st.success("✅ テスト用音声データを生成しました")
+            return test_audio
+        
         return None
     
     try:
@@ -1772,14 +1787,14 @@ def record_audio(duration: int = 5, sample_rate: int = 44100, channels: int = 1)
             frames_per_buffer=1024
         )
         
-        st.info(f"録音を開始します（{duration}秒間）...")
+        st.info(f"🎙️ 録音を開始します（{duration}秒間）...")
         
         frames = []
         for i in range(0, int(sample_rate / 1024 * duration)):
             data = stream.read(1024)
             frames.append(data)
         
-        st.success("録音が完了しました！")
+        st.success("✅ 録音が完了しました！")
         
         # ストリームを閉じる
         stream.stop_stream()
@@ -1793,27 +1808,30 @@ def record_audio(duration: int = 5, sample_rate: int = 44100, channels: int = 1)
         return audio_array
         
     except Exception as e:
-        st.error(f"録音エラー: {e}")
+        st.error(f"❌ 録音エラー: {e}")
         return None
 
 def save_audio_file(audio_data: np.ndarray, filename: str, sample_rate: int = 44100) -> bool:
-    """音声ファイルを保存（Python 3.13対応版）"""
+    """音声ファイルを保存（SciPy優先版）"""
     
-    # 1. soundfileライブラリを試行
-    if SOUNDFILE_AVAILABLE:
-        try:
-            sf.write(filename, audio_data, sample_rate)
-            return True
-        except Exception as e:
-            st.warning(f"soundfileでの保存に失敗: {e}")
-    
-    # 2. scipyライブラリを試行
+    # 1. scipyライブラリを優先使用（最も安定）
     if SCIPY_AVAILABLE:
         try:
+            from scipy.io import wavfile
             wavfile.write(filename, sample_rate, audio_data)
+            st.success(f"✅ 音声ファイルを保存しました: {filename}")
             return True
         except Exception as e:
             st.warning(f"scipyでの保存に失敗: {e}")
+    
+    # 2. soundfileライブラリを試行
+    if SOUNDFILE_AVAILABLE:
+        try:
+            sf.write(filename, audio_data, sample_rate)
+            st.success(f"✅ 音声ファイルを保存しました: {filename}")
+            return True
+        except Exception as e:
+            st.warning(f"soundfileでの保存に失敗: {e}")
     
     # 3. pydubライブラリを試行
     if PYDUB_AVAILABLE:
@@ -1826,6 +1844,7 @@ def save_audio_file(audio_data: np.ndarray, filename: str, sample_rate: int = 44
                 channels=1
             )
             audio_segment.export(filename, format="wav")
+            st.success(f"✅ 音声ファイルを保存しました: {filename}")
             return True
         except Exception as e:
             st.warning(f"pydubでの保存に失敗: {e}")
@@ -1838,29 +1857,33 @@ def save_audio_file(audio_data: np.ndarray, filename: str, sample_rate: int = 44
             wav_file.setsampwidth(2)  # 16-bit
             wav_file.setframerate(sample_rate)
             wav_file.writeframes(audio_data.tobytes())
+        st.success(f"✅ 音声ファイルを保存しました: {filename}")
         return True
     except Exception as e:
-        st.error(f"音声ファイル保存エラー: {e}")
+        st.error(f"❌ 音声ファイル保存エラー: {e}")
         return False
 
 def load_audio_file(filename: str) -> Optional[Tuple[np.ndarray, int]]:
-    """音声ファイルを読み込み（Python 3.13対応版）"""
+    """音声ファイルを読み込み（SciPy優先版）"""
     
-    # 1. soundfileライブラリを試行
-    if SOUNDFILE_AVAILABLE:
-        try:
-            audio_data, sample_rate = sf.read(filename)
-            return audio_data, sample_rate
-        except Exception as e:
-            st.warning(f"soundfileでの読み込みに失敗: {e}")
-    
-    # 2. scipyライブラリを試行
+    # 1. scipyライブラリを優先使用（最も安定）
     if SCIPY_AVAILABLE:
         try:
+            from scipy.io import wavfile
             sample_rate, audio_data = wavfile.read(filename)
+            st.success(f"✅ 音声ファイルを読み込みました: {filename}")
             return audio_data, sample_rate
         except Exception as e:
             st.warning(f"scipyでの読み込みに失敗: {e}")
+    
+    # 2. soundfileライブラリを試行
+    if SOUNDFILE_AVAILABLE:
+        try:
+            audio_data, sample_rate = sf.read(filename)
+            st.success(f"✅ 音声ファイルを読み込みました: {filename}")
+            return audio_data, sample_rate
+        except Exception as e:
+            st.warning(f"soundfileでの読み込みに失敗: {e}")
     
     # 3. pydubライブラリを試行
     if PYDUB_AVAILABLE:
@@ -1868,6 +1891,7 @@ def load_audio_file(filename: str) -> Optional[Tuple[np.ndarray, int]]:
             audio_segment = AudioSegment.from_file(filename)
             audio_data = np.array(audio_segment.get_array_of_samples())
             sample_rate = audio_segment.frame_rate
+            st.success(f"✅ 音声ファイルを読み込みました: {filename}")
             return audio_data, sample_rate
         except Exception as e:
             st.warning(f"pydubでの読み込みに失敗: {e}")
@@ -1878,9 +1902,10 @@ def load_audio_file(filename: str) -> Optional[Tuple[np.ndarray, int]]:
         with wave.open(filename, 'rb') as wav_file:
             sample_rate = wav_file.getframerate()
             audio_data = np.frombuffer(wav_file.readframes(wav_file.getnframes()), dtype=np.int16)
+            st.success(f"✅ 音声ファイルを読み込みました: {filename}")
             return audio_data, sample_rate
     except Exception as e:
-        st.error(f"音声ファイル読み込みエラー: {e}")
+        st.error(f"❌ 音声ファイル読み込みエラー: {e}")
         return None
 
 
@@ -1906,19 +1931,29 @@ def show_audio_library_status():
     st.sidebar.write(f"**OpenAI**: {'✅ 利用可能' if OPENAI_AVAILABLE else '❌ 利用不可'}")
     st.sidebar.write(f"**st_audiorec**: {'✅ 利用可能' if 'ST_AUDIOREC_AVAILABLE' in globals() and ST_AUDIOREC_AVAILABLE else '❌ 利用不可'}")
     
-    # 音声処理ライブラリ
+    # 音声処理ライブラリ（優先順位順）
+    st.sidebar.write(f"**SciPy**: {'✅ 利用可能' if SCIPY_AVAILABLE else '❌ 利用不可'}")
     st.sidebar.write(f"**SoundFile**: {'✅ 利用可能' if SOUNDFILE_AVAILABLE else '❌ 利用不可'}")
     st.sidebar.write(f"**Librosa**: {'✅ 利用可能' if LIBROSA_AVAILABLE else '❌ 利用不可'}")
-    
-    # 代替ライブラリ
     st.sidebar.write(f"**PyDub**: {'✅ 利用可能' if PYDUB_AVAILABLE else '❌ 利用不可'}")
-    st.sidebar.write(f"**SciPy**: {'✅ 利用可能' if SCIPY_AVAILABLE else '❌ 利用不可'}")
+    
+    # 利用可能なライブラリの概要
+    available_libs = get_available_audio_libraries()
+    if available_libs:
+        st.sidebar.success(f"✅ 利用可能: {', '.join(available_libs)}")
+        
+        # SciPyが利用可能な場合の追加情報
+        if SCIPY_AVAILABLE:
+            st.sidebar.info("💡 SciPyを使用した音声分析・エンハンスメント機能が利用可能です")
+    else:
+        st.sidebar.error("❌ 音声処理ライブラリが利用できません")
     
     # Python 3.13対応状況
     python_version = sys.version_info
     if python_version.major == 3 and python_version.minor >= 13:
         st.sidebar.warning("⚠️ Python 3.13+環境: 一部の音声処理ライブラリが利用できません")
-        st.sidebar.info("💡 代替ライブラリ（PyDub, SciPy）を使用します")
+        if SCIPY_AVAILABLE:
+            st.sidebar.info("💡 SciPyを使用した代替機能を提供します")
     else:
         st.sidebar.success("✅ 標準的なPython環境: 全ライブラリが利用可能")
 
@@ -1927,13 +1962,134 @@ def get_available_audio_libraries() -> List[str]:
     """利用可能な音声処理ライブラリのリストを取得"""
     available_libs = []
     
+    if SCIPY_AVAILABLE:
+        available_libs.append("SciPy")
     if SOUNDFILE_AVAILABLE:
         available_libs.append("SoundFile")
     if LIBROSA_AVAILABLE:
         available_libs.append("Librosa")
     if PYDUB_AVAILABLE:
         available_libs.append("PyDub")
-    if SCIPY_AVAILABLE:
-        available_libs.append("SciPy")
     
     return available_libs
+
+
+def analyze_audio_with_scipy(audio_data: np.ndarray, sample_rate: int) -> Dict[str, Any]:
+    """SciPyを使用した音声分析"""
+    if not SCIPY_AVAILABLE:
+        return {"error": "SciPyが利用できません"}
+    
+    try:
+        from scipy import signal
+        from scipy.stats import describe
+        
+        analysis = {}
+        
+        # 基本統計情報
+        stats = describe(audio_data)
+        analysis["mean"] = float(stats.mean)
+        analysis["variance"] = float(stats.variance)
+        analysis["skewness"] = float(stats.skewness)
+        analysis["kurtosis"] = float(stats.kurtosis)
+        
+        # 音量レベル（RMS）
+        rms = np.sqrt(np.mean(audio_data**2))
+        analysis["rms_level"] = float(rms)
+        
+        # 最大振幅
+        max_amplitude = np.max(np.abs(audio_data))
+        analysis["max_amplitude"] = float(max_amplitude)
+        
+        # 動的範囲
+        dynamic_range = 20 * np.log10(max_amplitude / (rms + 1e-10))
+        analysis["dynamic_range_db"] = float(dynamic_range)
+        
+        # スペクトラム分析
+        if len(audio_data) > 1024:
+            freqs, psd = signal.welch(audio_data, sample_rate, nperseg=1024)
+            analysis["dominant_frequency"] = float(freqs[np.argmax(psd)])
+            analysis["spectral_centroid"] = float(np.sum(freqs * psd) / np.sum(psd))
+        
+        # ゼロクロス率（音声の特徴量）
+        zero_crossings = np.sum(np.diff(np.sign(audio_data)) != 0)
+        analysis["zero_crossing_rate"] = float(zero_crossings / len(audio_data))
+        
+        # 音声の長さ
+        duration = len(audio_data) / sample_rate
+        analysis["duration_seconds"] = float(duration)
+        
+        return analysis
+        
+    except Exception as e:
+        return {"error": f"音声分析エラー: {str(e)}"}
+
+
+def enhance_audio_with_scipy(audio_data: np.ndarray, sample_rate: int, 
+                           gain: float = 1.0, noise_reduction: bool = False) -> np.ndarray:
+    """SciPyを使用した音声エンハンスメント"""
+    if not SCIPY_AVAILABLE:
+        return audio_data
+    
+    try:
+        from scipy import signal
+        
+        enhanced_audio = audio_data.copy()
+        
+        # ゲイン調整
+        if gain != 1.0:
+            enhanced_audio = enhanced_audio * gain
+        
+        # ノイズリダクション（簡単なローパスフィルタ）
+        if noise_reduction:
+            # バターワースローパスフィルタ
+            nyquist = sample_rate / 2
+            cutoff = 8000  # 8kHz以下を通過
+            order = 5
+            b, a = signal.butter(order, cutoff / nyquist, btype='low')
+            enhanced_audio = signal.filtfilt(b, a, enhanced_audio)
+        
+        return enhanced_audio
+        
+    except Exception as e:
+        st.warning(f"音声エンハンスメントエラー: {e}")
+        return audio_data
+
+
+def detect_silence(audio_data: np.ndarray, sample_rate: int, 
+                  threshold: float = 0.01, min_duration: float = 0.5) -> List[Dict[str, float]]:
+    """無音区間の検出"""
+    if not SCIPY_AVAILABLE:
+        return []
+    
+    try:
+        from scipy import signal
+        
+        # 音量レベルを計算
+        window_size = int(sample_rate * 0.1)  # 100msウィンドウ
+        rms = np.array([np.sqrt(np.mean(audio_data[i:i+window_size]**2)) 
+                       for i in range(0, len(audio_data) - window_size, window_size)])
+        
+        # 無音区間を検出
+        silence_mask = rms < threshold
+        silence_regions = []
+        
+        if np.any(silence_mask):
+            # 連続する無音区間をグループ化
+            silence_starts = np.where(np.diff(silence_mask.astype(int)) == 1)[0]
+            silence_ends = np.where(np.diff(silence_mask.astype(int)) == -1)[0]
+            
+            if len(silence_starts) > 0 and len(silence_ends) > 0:
+                for start, end in zip(silence_starts, silence_ends):
+                    duration = (end - start) * window_size / sample_rate
+                    if duration >= min_duration:
+                        silence_regions.append({
+                            "start_time": float(start * window_size / sample_rate),
+                            "end_time": float(end * window_size / sample_rate),
+                            "duration": float(duration)
+                        })
+        
+        return silence_regions
+        
+    except Exception as e:
+        st.warning(f"無音検出エラー: {e}")
+        return []

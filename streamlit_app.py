@@ -690,15 +690,7 @@ def main():
         st.info("ページを再読み込みしてください")
         return
     
-    # 環境情報の表示
-    try:
-        st.sidebar.write("**環境情報**")
-        st.sidebar.write(f"Python: {sys.version}")
-        st.sidebar.write(f"Streamlit: {st.__version__}")
-    except Exception as e:
-        st.sidebar.warning(f"環境情報の表示エラー: {e}")
-    
-    # 音声処理ライブラリの状況表示
+    # 音声処理ライブラリの状況表示（サイドバーに残す）
     try:
         if UTILS_AVAILABLE:
             try:
@@ -710,21 +702,6 @@ def main():
             st.sidebar.warning("音声処理ライブラリ状況が確認できません")
     except Exception as e:
         st.sidebar.warning(f"音声処理ライブラリ状況の確認エラー: {e}")
-    
-    # 設定の検証
-    try:
-        if CONFIG_AVAILABLE and CONFIG_UI_AVAILABLE and show_environment_info:
-            try:
-                show_environment_info()
-            except Exception as e:
-                st.warning(f"設定検証エラー: {e}")
-                st.info("設定は後で確認できます")
-        elif CONFIG_AVAILABLE:
-            st.sidebar.warning("設定確認機能が利用できません")
-        else:
-            st.sidebar.warning("設定管理機能が利用できません")
-    except Exception as e:
-        st.sidebar.warning(f"設定検証の初期化エラー: {e}")
     
     # アプリケーション実行
     try:
