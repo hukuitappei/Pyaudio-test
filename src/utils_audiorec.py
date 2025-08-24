@@ -1238,33 +1238,32 @@ class GoogleAuthManager:
                     self.service = build('calendar', 'v3', credentials=self.credentials)
                     return True
             
-            # 環境変数またはStreamlit Secretsから認証情報を取得
-            credentials = get_google_credentials()
-            if credentials is None:
-                st.error("Google認証情報が取得できませんでした")
-                return False
-            
-            client_id, client_secret, _ = credentials
+            # 認証情報を取得
+            client_id, client_secret, refresh_token = get_google_credentials()
             
             # 認証情報の詳細チェック
             st.info("🔍 Google認証情報を確認中...")
             
             if not client_id:
                 st.error("❌ GOOGLE_CLIENT_IDが設定されていません")
-                st.info("Google Cloud ConsoleでOAuth 2.0クライアントIDを作成し、設定してください")
+                st.info("Streamlit Secretsまたは環境変数にGOOGLE_CLIENT_IDを設定してください")
                 return False
             
             if not client_secret:
                 st.error("❌ GOOGLE_CLIENT_SECRETが設定されていません")
-                st.info("Google Cloud ConsoleでOAuth 2.0クライアントシークレットを設定してください")
+                st.info("Streamlit Secretsまたは環境変数にGOOGLE_CLIENT_SECRETを設定してください")
                 return False
             
             st.success("✅ 基本認証情報が確認されました")
             
-            if client_id and client_secret:
-                creds = self._create_credentials_from_env(client_id, client_secret)
+            # リフレッシュトークンがある場合は復元、ない場合は初回認証
+            if refresh_token:
+                st.info("🔄 既存のリフレッシュトークンを使用して認証を復元中...")
+                creds = self._create_credentials_from_refresh_token(client_id, client_secret, refresh_token)
             else:
-                creds = self._authenticate_from_file()
+                st.warning("⚠️ リフレッシュトークンが設定されていません")
+                st.info("初回認証を開始します...")
+                creds = self._handle_initial_auth(client_id, client_secret)
             
             if not creds:
                 return False
@@ -1273,10 +1272,13 @@ class GoogleAuthManager:
             st.session_state.google_credentials = creds
             st.session_state.google_auth_status = True
             self.service = build('calendar', 'v3', credentials=creds)
+            
+            st.success("✅ Google Calendar認証が完了しました")
             return True
             
         except Exception as e:
             st.error(f"認証エラー: {str(e)}")
+            st.info("認証情報の設定を確認してください")
             return False
     
     def _is_credentials_valid(self) -> bool:
@@ -1360,7 +1362,7 @@ class GoogleAuthManager:
         # セッション状態の初期化
         self._initialize_session_state()
         
-        # セッション状態で認証フローを管理
+        # 認証フローの管理
         if 'google_auth_flow' not in st.session_state:
             try:
                 # 認証情報の詳細チェック
@@ -1373,6 +1375,7 @@ class GoogleAuthManager:
                     st.info("Google Cloud ConsoleでOAuth 2.0クライアントIDを作成し、設定してください")
                     return None
                 
+                # 認証設定
                 client_config = {
                     "web": {
                         "client_id": client_id,
@@ -1391,7 +1394,11 @@ class GoogleAuthManager:
                 )
                 
                 st.info("🔗 認証URLを生成中...")
-                auth_url, _ = flow.authorization_url(prompt='consent')
+                auth_url, _ = flow.authorization_url(
+                    prompt='consent',
+                    access_type='offline',
+                    include_granted_scopes='true'
+                )
                 
                 if not auth_url:
                     st.error("❌ 認証URLの生成に失敗しました")
@@ -1453,8 +1460,13 @@ class GoogleAuthManager:
                 # リフレッシュトークンを表示（ユーザーが環境変数に設定するため）
                 if creds.refresh_token:
                     st.success("✅ 認証が完了しました！")
-                    st.info("🔑 リフレッシュトークン（環境変数に設定してください）:")
+                    st.info("🔑 リフレッシュトークン（Streamlit Secretsに設定してください）:")
                     st.code(creds.refresh_token)
+                    
+                    st.info("📝 設定手順:")
+                    st.info("1. 上記のリフレッシュトークンをコピー")
+                    st.info("2. Streamlit CloudのSecrets設定でGOOGLE_REFRESH_TOKENに設定")
+                    st.info("3. アプリケーションを再起動")
                     
                     # セッション状態をクリア
                     if 'google_auth_flow' in st.session_state:
@@ -1467,10 +1479,12 @@ class GoogleAuthManager:
                     return creds
                 else:
                     st.error("❌ リフレッシュトークンが取得できませんでした")
+                    st.info("認証スコープに'offline_access'が含まれているか確認してください")
                     return None
                     
             except Exception as e:
                 st.error(f"認証完了エラー: {e}")
+                st.info("認証コードが正しく入力されているか確認してください")
                 return None
         
         return None
@@ -1529,6 +1543,35 @@ class GoogleAuthManager:
         st.session_state.google_credentials = None
         st.session_state.google_auth_status = False
         st.success("ログアウトしました")
+    
+    def _create_credentials_from_refresh_token(self, client_id: str, client_secret: str, refresh_token: str) -> Optional[Credentials]:
+        """リフレッシュトークンから認証情報を作成"""
+        if not GOOGLE_AUTH_AVAILABLE:
+            st.error("❌ Google認証ライブラリが利用できません")
+            return None
+        
+        try:
+            # リフレッシュトークンから認証情報を作成
+            creds = Credentials(
+                token=None,
+                refresh_token=refresh_token,
+                token_uri="https://oauth2.googleapis.com/token",
+                client_id=client_id,
+                client_secret=client_secret,
+                scopes=self.SCOPES
+            )
+            
+            # トークンをリフレッシュ
+            if creds.expired:
+                st.info("🔄 アクセストークンを更新中...")
+                creds.refresh(Request())
+                st.success("✅ アクセストークンを更新しました")
+            
+            return creds
+        except Exception as e:
+            st.error(f"リフレッシュトークンからの認証情報作成に失敗しました: {e}")
+            st.info("リフレッシュトークンが無効な可能性があります。初回認証を再実行してください。")
+            return None
 
 
 # グローバル認証マネージャーインスタンス

@@ -1602,8 +1602,25 @@ def render_calendar_sync_tab(auth_manager):
     if not auth_manager:
         st.error("❌ Google認証マネージャーが利用できません")
         st.info("Google認証ライブラリが正しくインストールされているか確認してください")
-    elif auth_manager.is_authenticated():
+        return
+    
+    # 認証状態の詳細表示
+    st.subheader("🔐 認証状態")
+    
+    if auth_manager.is_authenticated():
         st.success("✅ Googleカレンダー認証済み")
+        
+        # サービス接続テスト
+        service = auth_manager.get_service()
+        if service:
+            try:
+                # カレンダー情報を取得して接続をテスト
+                calendar_list = service.calendarList().list().execute()
+                st.success(f"✅ Googleカレンダーに接続済み（利用可能カレンダー: {len(calendar_list.get('items', []))}個）")
+            except Exception as e:
+                st.warning(f"⚠️ カレンダー接続テストに失敗: {e}")
+        else:
+            st.warning("⚠️ カレンダーサービスに接続できません")
     else:
         st.warning("⚠️ Googleカレンダーが認証されていません")
         
@@ -1632,17 +1649,26 @@ def render_calendar_sync_tab(auth_manager):
                     st.success("✅ Refresh Token")
                 else:
                     st.warning("⚠️ Refresh Token")
+            
+            # 全体状況の表示
+            if credentials_status['all_required']:
+                if credentials_status['ready_for_auth']:
+                    st.success("🎉 すべての認証情報が設定されています！")
+                    st.info("認証ボタンをクリックしてGoogleカレンダーに接続してください")
+                else:
+                    st.warning("⚠️ 基本認証情報は設定済みですが、リフレッシュトークンが無効です")
+                    st.info("初回認証を再実行してリフレッシュトークンを更新してください")
+            else:
+                st.error("❌ 必要な認証情報が不足しています")
+                st.info("Streamlit Secretsまたは環境変数に認証情報を設定してください")
+                
         except Exception as e:
             st.warning(f"認証情報の確認に失敗しました: {e}")
         
         # Google認証ボタン
+        st.subheader("🔐 Google認証")
         if st.button("🔐 Googleカレンダー認証", key=f"google_auth_button_{uuid.uuid4().hex[:8]}"):
             try:
-                if not auth_manager:
-                    st.error("❌ 認証マネージャーが利用できません")
-                    st.info("Google認証ライブラリが正しくインストールされているか確認してください")
-                    return
-                
                 st.info("🔄 認証を開始しています...")
                 auth_result = auth_manager.authenticate()
                 if auth_result:
@@ -1660,20 +1686,35 @@ def render_calendar_sync_tab(auth_manager):
         return
     
     # イベント一覧表示
+    st.subheader("📅 イベント同期状況")
     events = calendar_manager.load_events()
     
     if events["events"]:
-        st.write("**未同期イベント**")
-        unsynced_events = {k: v for k, v in events["events"].items() 
-                          if not v.get('google_event_id')}
+        # 同期状況の統計
+        total_events = len(events["events"])
+        synced_events = len([e for e in events["events"].values() if e.get('google_event_id')])
+        unsynced_events = total_events - synced_events
         
-        if unsynced_events:
-            for event_id, event in unsynced_events.items():
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("総イベント数", total_events)
+        with col2:
+            st.metric("同期済み", synced_events)
+        with col3:
+            st.metric("未同期", unsynced_events)
+        
+        # 未同期イベントの表示
+        if unsynced_events > 0:
+            st.write("**未同期イベント**")
+            unsynced_events_dict = {k: v for k, v in events["events"].items() 
+                                  if not v.get('google_event_id')}
+            
+            for event_id, event in unsynced_events_dict.items():
                 col1, col2, col3 = st.columns([3, 1, 1])
                 
                 with col1:
                     st.write(f"📅 {event['title']}")
-                    if event['description']:
+                    if event.get('description'):
                         st.caption(event['description'])
                 
                 with col2:
@@ -1683,28 +1724,37 @@ def render_calendar_sync_tab(auth_manager):
                     sync_key = f"sync_event_{event_id}_{uuid.uuid4().hex[:8]}"
                     if st.button("📅 同期", key=sync_key):
                         if calendar_manager.sync_to_google_calendar(event_id):
+                            st.success("✅ 同期完了")
                             st.rerun()
+                        else:
+                            st.error("❌ 同期失敗")
+            
+            # 一括同期
+            st.write("### 一括操作")
+            if st.button("📅 未同期イベントを一括同期", key=f"bulk_sync_events_{uuid.uuid4().hex[:8]}"):
+                service = auth_manager.get_service()
+                if service:
+                    synced_count = 0
+                    for event_id, event in events["events"].items():
+                        if not event.get('google_event_id'):
+                            if calendar_manager.sync_to_google_calendar(event_id):
+                                synced_count += 1
+                    
+                    st.success(f"✅ {synced_count}件のイベントを同期しました")
+                    st.rerun()
+                else:
+                    st.error("❌ Googleカレンダーサービスに接続できません")
         else:
-            st.info("✅ すべてのイベントが同期済みです")
-        
-        # 一括同期
-        st.write("### 一括操作")
-        if st.button("📅 未同期イベントを一括同期", key=f"bulk_sync_events_{uuid.uuid4().hex[:8]}"):
-            service = auth_manager.get_service()
-            if service:
-                synced_count = 0
-                for event_id, event in events["events"].items():
-                    if not event.get('google_event_id'):
-                        if calendar_manager.sync_to_google_calendar(event_id):
-                            synced_count += 1
-                
-                st.success(f"✅ {synced_count}件のイベントを同期しました")
-                st.rerun()
-            else:
-                st.error("❌ Googleカレンダーサービスに接続できません")
+            st.success("✅ すべてのイベントが同期済みです")
     else:
         st.info("イベントがありません")
-
+    
+    # 認証解除
+    st.subheader("🔓 認証管理")
+    if st.button("🚪 ログアウト", key=f"logout_google_{uuid.uuid4().hex[:8]}"):
+        auth_manager.logout()
+        st.success("ログアウトしました")
+        st.rerun()
 
 def render_history_tab():
     """履歴タブ"""
