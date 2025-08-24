@@ -1459,6 +1459,7 @@ class GoogleCalendarManager:
             
             if not refresh_token:
                 st.warning("⚠️ GOOGLE_REFRESH_TOKENが設定されていません。初回認証が必要です。")
+                st.info("初回認証を開始します...")
                 return self._handle_initial_auth(client_id, client_secret)
             
             # 既存の認証情報から復元
@@ -1501,7 +1502,7 @@ class GoogleCalendarManager:
         if 'google_auth_flow' not in st.session_state:
             try:
                 # 認証情報の詳細チェック
-                st.info(f"🔍 認証情報チェック:")
+                st.info("🔍 Google認証情報を確認中...")
                 st.info(f"Client ID: {'✅ 設定済み' if client_id else '❌ 未設定'}")
                 st.info(f"Client Secret: {'✅ 設定済み' if client_secret else '❌ 未設定'}")
                 
@@ -1509,6 +1510,8 @@ class GoogleCalendarManager:
                     st.error("❌ 認証情報が不足しています")
                     st.info("Google Cloud ConsoleでOAuth 2.0クライアントIDを作成し、設定してください")
                     return None
+                
+                st.success("✅ 基本認証情報が確認されました")
                 
                 client_config = {
                     "web": {
@@ -1521,17 +1524,24 @@ class GoogleCalendarManager:
                 }
                 
                 st.info("🔄 認証フローを初期化中...")
-                flow = Flow.from_client_config(
-                    client_config,
-                    scopes=self.SCOPES,
-                    redirect_uri="urn:ietf:wg:oauth:2.0:oob"
-                )
-                
-                st.info("🔗 認証URLを生成中...")
-                auth_url, _ = flow.authorization_url(prompt='consent')
-                
-                if not auth_url:
-                    st.error("❌ 認証URLの生成に失敗しました")
+                try:
+                    flow = Flow.from_client_config(
+                        client_config,
+                        scopes=self.SCOPES,
+                        redirect_uri="urn:ietf:wg:oauth:2.0:oob"
+                    )
+                    
+                    st.info("🔗 認証URLを生成中...")
+                    auth_url, _ = flow.authorization_url(prompt='consent')
+                    
+                    if not auth_url:
+                        st.error("❌ 認証URLの生成に失敗しました")
+                        st.info("認証情報の形式を確認してください")
+                        return None
+                        
+                except Exception as e:
+                    st.error(f"❌ 認証フローの初期化エラー: {e}")
+                    st.info("認証情報が正しい形式で設定されているか確認してください")
                     return None
                 
                 # セッション状態に保存
@@ -1550,17 +1560,28 @@ class GoogleCalendarManager:
         if not st.session_state.google_auth_url:
             st.error("❌ 認証URLが生成されていません")
             st.info("認証フローをリセットして再試行してください")
+            
+            # リセットボタンを表示
+            if st.button("🔄 認証フローをリセット", key="reset_auth_flow_early"):
+                if 'google_auth_flow' in st.session_state:
+                    del st.session_state.google_auth_flow
+                if 'google_auth_url' in st.session_state:
+                    del st.session_state.google_auth_url
+                if 'google_auth_key' in st.session_state:
+                    del st.session_state.google_auth_key
+                st.rerun()
             return None
         
+        st.success("✅ 認証URLが生成されました")
         st.info("📋 認証手順:")
         st.markdown("1. 以下の認証URLをクリックしてGoogle認証画面を開いてください:")
-        st.markdown(f"**認証URL**: {st.session_state.google_auth_url}")
-        st.markdown("2. Googleアカウントでログインし、権限を許可してください")
-        st.markdown("3. 表示された認証コードを下のフィールドに入力してください")
         
         # 認証URLをクリック可能なボタンとして表示
         if st.button("🔗 Google認証画面を開く", key=f"open_auth_url_{st.session_state.google_auth_key}"):
             st.markdown(f"[Google認証画面を開く]({st.session_state.google_auth_url})")
+        
+        st.markdown("2. Googleアカウントでログインし、権限を許可してください")
+        st.markdown("3. 表示された認証コードを下のフィールドに入力してください")
         
         # 認証フローをリセットするボタン
         if st.button("🔄 認証フローをリセット", key=f"reset_auth_flow_{st.session_state.google_auth_key}"):
