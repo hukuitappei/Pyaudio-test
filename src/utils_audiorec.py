@@ -578,10 +578,11 @@ class DeviceManager:
 class TaskManager:
     """タスク管理クラス"""
     
-    def __init__(self) -> None:
+    def __init__(self):
         self.tasks_file = "settings/tasks.json"
         self.ensure_tasks_directory()
         self.auth_manager = get_google_auth_manager()
+        self.settings_manager = SettingsManager()
     
     def ensure_tasks_directory(self) -> None:
         """タスクディレクトリの作成"""
@@ -617,28 +618,70 @@ class TaskManager:
             return False
     
     def add_task(self, title: str, description: str = "", priority: str = "中", 
-                 due_date: Optional[str] = None, category: str = "その他") -> bool:
+                 due_date: str = None, category: str = "その他", auto_sync: bool = False) -> bool:
         """タスクを追加"""
         try:
             tasks = self.load_tasks()
-            task_id = str(uuid.uuid4())
             
+            task_id = str(uuid.uuid4())
             task = {
                 "id": task_id,
                 "title": title,
                 "description": description,
                 "priority": priority,
-                "status": "pending",
-                "created_at": datetime.now().isoformat(),
                 "due_date": due_date,
                 "category": category,
-                "google_event_id": None
+                "status": "pending",
+                "created_at": datetime.now().isoformat(),
+                "updated_at": datetime.now().isoformat()
             }
             
             tasks["tasks"][task_id] = task
-            return self.save_tasks(tasks)
+            
+            if self.save_tasks(tasks):
+                # 自動同期が有効な場合、Googleカレンダーに同期
+                if auto_sync:
+                    self.auto_sync_to_calendar(task_id)
+                return True
+            return False
         except Exception as e:
             st.error(f"タスク追加エラー: {e}")
+            return False
+    
+    def auto_sync_to_calendar(self, task_id: str) -> bool:
+        """タスクを自動的にGoogleカレンダーに同期"""
+        try:
+            # 設定を読み込み
+            settings = self.settings_manager.load_settings()
+            
+            # 自動同期設定を確認
+            if not settings.get("task_management", {}).get("auto_sync_to_calendar", False):
+                return False
+            
+            # 認証状態を確認
+            if not self.auth_manager or not self.auth_manager.is_authenticated():
+                return False
+            
+            # タスクを取得
+            tasks = self.load_tasks()
+            if task_id not in tasks["tasks"]:
+                return False
+            
+            task = tasks["tasks"][task_id]
+            
+            # 既に同期済みの場合はスキップ
+            if task.get('google_event_id'):
+                return True
+            
+            # 完了タスクの同期設定を確認
+            if task['status'] == 'completed' and not settings.get("task_management", {}).get("sync_completed_tasks", False):
+                return False
+            
+            # Googleカレンダーに同期
+            return self.sync_to_google_calendar(task_id)
+            
+        except Exception as e:
+            st.error(f"自動同期エラー: {e}")
             return False
     
     def update_task(self, task_id: str, **kwargs) -> bool:
@@ -690,16 +733,33 @@ class TaskManager:
                 st.error("Googleカレンダーが認証されていません")
                 return False
             
+            # 設定を読み込み
+            settings = self.settings_manager.load_settings()
+            timezone = settings.get("task_management", {}).get("calendar_timezone", "Asia/Tokyo")
+            default_duration = settings.get("task_management", {}).get("default_event_duration", 60)
+            
+            # 開始時間と終了時間を設定
+            start_time = task.get('due_date')
+            if start_time:
+                if isinstance(start_time, str):
+                    start_time = datetime.fromisoformat(start_time.replace('Z', '+00:00'))
+                if isinstance(start_time, date) and not isinstance(start_time, datetime):
+                    start_time = datetime.combine(start_time, datetime.min.time())
+            else:
+                start_time = datetime.now()
+            
+            end_time = start_time + timedelta(minutes=default_duration)
+            
             event = {
                 'summary': task['title'],
                 'description': task['description'],
                 'start': {
-                    'dateTime': task['due_date'] or datetime.now().isoformat(),
-                    'timeZone': 'Asia/Tokyo',
+                    'dateTime': start_time.isoformat(),
+                    'timeZone': timezone,
                 },
                 'end': {
-                    'dateTime': task['due_date'] or (datetime.now() + timedelta(hours=1)).isoformat(),
-                    'timeZone': 'Asia/Tokyo',
+                    'dateTime': end_time.isoformat(),
+                    'timeZone': timezone,
                 }
             }
             
@@ -795,11 +855,126 @@ class CalendarManager:
         try:
             events = self.load_events()
             if event_id in events["events"]:
+                # 更新前のイベント情報を保存
+                old_event = events["events"][event_id].copy()
+                
+                # イベントを更新
                 events["events"][event_id].update(kwargs)
+                events["events"][event_id]["updated_at"] = datetime.now().isoformat()
+                
+                # Googleカレンダーに同期されている場合は、Googleカレンダーも更新
+                if events["events"][event_id].get('google_event_id'):
+                    if not self._update_google_calendar_event(event_id, events["events"][event_id]):
+                        st.warning("Googleカレンダーの更新に失敗しましたが、ローカルイベントは更新されました")
+                
                 return self.save_events(events)
             return False
         except Exception as e:
             st.error(f"イベント更新エラー: {e}")
+            return False
+    
+    def _update_google_calendar_event(self, event_id: str, event: Dict[str, Any]) -> bool:
+        """Googleカレンダーのイベントを更新"""
+        try:
+            if not self.auth_manager or not self.auth_manager.is_authenticated():
+                return False
+            
+            service = self.auth_manager.get_service()
+            if not service:
+                return False
+            
+            google_event = {
+                'summary': event['title'],
+                'description': event['description'],
+                'start': {
+                    'dateTime': event['start_date'],
+                    'timeZone': 'Asia/Tokyo',
+                },
+                'end': {
+                    'dateTime': event['end_date'],
+                    'timeZone': 'Asia/Tokyo',
+                }
+            }
+            
+            if event.get('all_day', False):
+                google_event['start'] = {'date': event['start_date'][:10]}
+                google_event['end'] = {'date': event['end_date'][:10]}
+            
+            service.events().update(
+                calendarId='primary',
+                eventId=event['google_event_id'],
+                body=google_event
+            ).execute()
+            
+            return True
+            
+        except Exception as e:
+            st.error(f"Googleカレンダー更新エラー: {e}")
+            return False
+    
+    def get_event(self, event_id: str) -> Optional[Dict[str, Any]]:
+        """特定のイベントを取得"""
+        try:
+            events = self.load_events()
+            return events["events"].get(event_id)
+        except Exception as e:
+            st.error(f"イベント取得エラー: {e}")
+            return None
+    
+    def search_events(self, query: str = "", category: str = "", 
+                     start_date: str = "", end_date: str = "") -> List[Tuple[str, Dict[str, Any]]]:
+        """イベントを検索"""
+        try:
+            events = self.load_events()
+            results = []
+            
+            for event_id, event in events["events"].items():
+                # タイトルと説明で検索
+                if query and query.lower() not in event['title'].lower() and query.lower() not in event.get('description', '').lower():
+                    continue
+                
+                # カテゴリでフィルター
+                if category and event.get('category', '') != category:
+                    continue
+                
+                # 日付範囲でフィルター
+                if start_date:
+                    event_start = datetime.fromisoformat(event['start_date'])
+                    filter_start = datetime.fromisoformat(start_date)
+                    if event_start < filter_start:
+                        continue
+                
+                if end_date:
+                    event_end = datetime.fromisoformat(event['end_date'])
+                    filter_end = datetime.fromisoformat(end_date)
+                    if event_end > filter_end:
+                        continue
+                
+                results.append((event_id, event))
+            
+            return results
+            
+        except Exception as e:
+            st.error(f"イベント検索エラー: {e}")
+            return []
+    
+    def bulk_update_events(self, event_ids: List[str], **kwargs) -> bool:
+        """複数イベントを一括更新"""
+        try:
+            success_count = 0
+            for event_id in event_ids:
+                if self.update_event(event_id, **kwargs):
+                    success_count += 1
+            
+            if success_count > 0:
+                st.success(f"{success_count}個のイベントを更新しました")
+                return True
+            else:
+                st.error("イベントの更新に失敗しました")
+                return False
+                
+        except Exception as e:
+            st.error(f"一括更新エラー: {e}")
             return False
     
     def delete_event(self, event_id: str) -> bool:

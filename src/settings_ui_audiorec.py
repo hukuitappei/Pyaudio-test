@@ -693,6 +693,20 @@ def render_task_add_tab(auth_manager):
     # TaskManagerをインスタンス化
     task_manager = TaskManager()
     
+    # 設定マネージャーをインスタンス化
+    settings_manager = SettingsManager()
+    settings = settings_manager.load_settings()
+    
+    # タスク管理設定の初期化
+    if "task_management" not in settings:
+        settings["task_management"] = {
+            "auto_sync_to_calendar": False,
+            "default_sync_to_calendar": True,
+            "sync_completed_tasks": False,
+            "calendar_timezone": "Asia/Tokyo",
+            "default_event_duration": 60
+        }
+    
     with st.form("add_task_form"):
         title = st.text_input("タスク名", key="task_title")
         description = st.text_area("説明", key="task_description")
@@ -704,7 +718,9 @@ def render_task_add_tab(auth_manager):
         
         with col2:
             due_date = st.date_input("期限", key="task_due_date")
-            sync_to_calendar = st.checkbox("Googleカレンダーに同期", key="task_sync_calendar")
+            # 設定に基づいてデフォルト値を設定
+            default_sync = settings["task_management"]["default_sync_to_calendar"]
+            sync_to_calendar = st.checkbox("Googleカレンダーに同期", value=default_sync, key="task_sync_calendar")
         
         submitted = st.form_submit_button("タスクを追加")
         
@@ -721,14 +737,18 @@ def render_task_add_tab(auth_manager):
                 description=description,
                 priority=priority,
                 due_date=due_date.isoformat() if due_date else None,
-                category=category
+                category=category,
+                auto_sync=settings["task_management"]["auto_sync_to_calendar"]
             )
             
             if task_added:
                 st.success("✅ タスクを追加しました")
                 
-                # Googleカレンダーに同期
-                if sync_to_calendar and auth_manager and auth_manager.authenticate():
+                # 自動同期設定が有効な場合、または手動で同期が選択された場合
+                auto_sync_enabled = settings["task_management"]["auto_sync_to_calendar"]
+                should_sync = auto_sync_enabled or sync_to_calendar
+                
+                if should_sync and auth_manager and auth_manager.authenticate():
                     # 最新のタスクを取得
                     tasks = task_manager.load_tasks()
                     latest_task_id = None
@@ -741,15 +761,16 @@ def render_task_add_tab(auth_manager):
                             break
                     
                     if latest_task:
-                        # Googleカレンダーイベントとして追加
-                        event_data = {
-                            'title': title,
-                            'description': description,
-                            'start_date': due_date.isoformat() if due_date else datetime.now().isoformat(),
-                            'end_date': due_date.isoformat() if due_date else (datetime.now() + timedelta(hours=1)).isoformat(),
-                            'all_day': False,
-                            'category': category
-                        }
+                        # 設定からタイムゾーンとデフォルト時間を取得
+                        timezone = settings["task_management"]["calendar_timezone"]
+                        default_duration = settings["task_management"]["default_event_duration"]
+                        
+                        # 開始時間と終了時間を設定
+                        start_time = due_date if due_date else datetime.now()
+                        if isinstance(start_time, date):
+                            start_time = datetime.combine(start_time, datetime.min.time())
+                        
+                        end_time = start_time + timedelta(minutes=default_duration)
                         
                         service = auth_manager.get_service()
                         if service:
@@ -757,12 +778,12 @@ def render_task_add_tab(auth_manager):
                                 'summary': title,
                                 'description': description,
                                 'start': {
-                                    'dateTime': due_date.isoformat() if due_date else datetime.now().isoformat(),
-                                    'timeZone': 'Asia/Tokyo',
+                                    'dateTime': start_time.isoformat(),
+                                    'timeZone': timezone,
                                 },
                                 'end': {
-                                    'dateTime': due_date.isoformat() if due_date else (datetime.now() + timedelta(hours=1)).isoformat(),
-                                    'timeZone': 'Asia/Tokyo',
+                                    'dateTime': end_time.isoformat(),
+                                    'timeZone': timezone,
                                 }
                             }
                             
@@ -771,13 +792,19 @@ def render_task_add_tab(auth_manager):
                             ).execute()
                             
                             task_manager.update_task(latest_task_id, google_event_id=created_event['id'])
-                            st.success("✅ Googleカレンダーにも同期しました")
+                            
+                            if auto_sync_enabled:
+                                st.success("✅ 自動同期によりGoogleカレンダーに同期しました")
+                            else:
+                                st.success("✅ Googleカレンダーにも同期しました")
                         else:
                             st.warning("⚠️ Googleカレンダーへの同期に失敗しました")
                     else:
                         st.warning("⚠️ タスクの取得に失敗しました")
-                elif sync_to_calendar:
+                elif should_sync:
                     st.warning("⚠️ Googleカレンダーの認証に失敗しました")
+                elif auto_sync_enabled:
+                    st.info("💡 自動同期が有効ですが、Googleカレンダーの認証が必要です")
 
 
 def render_task_calendar_sync_tab(auth_manager):
@@ -902,6 +929,10 @@ def render_task_settings_tab():
     # TaskManagerをインスタンス化
     task_manager = TaskManager()
     
+    # 設定マネージャーをインスタンス化
+    settings_manager = SettingsManager()
+    settings = settings_manager.load_settings()
+    
     # タスク統計
     tasks = task_manager.load_tasks()
     total_tasks = len(tasks["tasks"])
@@ -943,45 +974,79 @@ def render_task_settings_tab():
     # 設定オプション
     st.write("### 設定オプション")
     
+    # タスク管理設定の初期化
+    if "task_management" not in settings:
+        settings["task_management"] = {
+            "auto_sync_to_calendar": False,
+            "default_sync_to_calendar": True,
+            "sync_completed_tasks": False,
+            "calendar_timezone": "Asia/Tokyo",
+            "default_event_duration": 60
+        }
+    
     # 自動同期設定
-    auto_sync = st.checkbox("Googleカレンダーに自動同期", value=False, key="task_auto_sync")
+    auto_sync_key = f"task_auto_sync_{uuid.uuid4().hex[:8]}"
+    default_sync_key = f"task_default_sync_{uuid.uuid4().hex[:8]}"
+    sync_completed_key = f"task_sync_completed_{uuid.uuid4().hex[:8]}"
+    timezone_key = f"task_timezone_{uuid.uuid4().hex[:8]}"
+    duration_key = f"task_duration_{uuid.uuid4().hex[:8]}"
+    
+    auto_sync = st.checkbox(
+        "Googleカレンダーに自動同期", 
+        value=settings["task_management"]["auto_sync_to_calendar"], 
+        key=auto_sync_key
+    )
     if auto_sync:
         st.info("💡 新しいタスクが追加された際に自動的にGoogleカレンダーに同期されます")
     
-    # 通知設定
-    enable_notifications = st.checkbox("期限通知を有効にする", value=True, key="task_notifications")
-    if enable_notifications:
-        notification_days = st.slider("何日前に通知", 1, 7, 3, key="task_notification_days")
-        st.info(f"💡 期限の{notification_days}日前に通知されます")
+    default_sync = st.checkbox(
+        "新規タスクのデフォルト同期", 
+        value=settings["task_management"]["default_sync_to_calendar"], 
+        key=default_sync_key
+    )
+    if default_sync:
+        st.info("💡 新規タスク追加時にGoogleカレンダー同期をデフォルトで有効にします")
     
-    # データ管理
-    st.write("### データ管理")
+    sync_completed = st.checkbox(
+        "完了タスクも同期", 
+        value=settings["task_management"]["sync_completed_tasks"], 
+        key=sync_completed_key
+    )
+    if sync_completed:
+        st.info("💡 完了したタスクもGoogleカレンダーに同期します")
     
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("🗑️ 完了タスクを削除"):
-            completed_task_ids = [task_id for task_id, task in tasks["tasks"].items() 
-                                if task["status"] == "completed"]
-            deleted_count = 0
-            for task_id in completed_task_ids:
-                if task_manager.delete_task(task_id):
-                    deleted_count += 1
-            st.success(f"✅ {deleted_count}件の完了タスクを削除しました")
-            st.rerun()
+    # カレンダー設定
+    st.write("#### カレンダー設定")
+    timezone = st.selectbox(
+        "タイムゾーン",
+        ["Asia/Tokyo", "UTC", "America/New_York", "Europe/London"],
+        index=["Asia/Tokyo", "UTC", "America/New_York", "Europe/London"].index(
+            settings["task_management"]["calendar_timezone"]
+        ),
+        key=timezone_key
+    )
     
-    with col2:
-        if st.button("📊 タスクデータをエクスポート"):
-            # タスクデータをJSON形式でエクスポート
-            export_data = {
-                "export_date": datetime.now().isoformat(),
-                "tasks": tasks["tasks"]
-            }
-            st.download_button(
-                label="📥 ダウンロード",
-                data=json.dumps(export_data, ensure_ascii=False, indent=2),
-                file_name=f"tasks_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json",
-                mime="application/json"
-            )
+    duration = st.number_input(
+        "デフォルトイベント時間（分）",
+        min_value=15,
+        max_value=480,
+        value=settings["task_management"]["default_event_duration"],
+        step=15,
+        key=duration_key
+    )
+    
+    # 設定保存
+    if st.button("💾 設定を保存", key=f"save_task_settings_{uuid.uuid4().hex[:8]}"):
+        settings["task_management"]["auto_sync_to_calendar"] = auto_sync
+        settings["task_management"]["default_sync_to_calendar"] = default_sync
+        settings["task_management"]["sync_completed_tasks"] = sync_completed
+        settings["task_management"]["calendar_timezone"] = timezone
+        settings["task_management"]["default_event_duration"] = duration
+        
+        if settings_manager.save_settings(settings):
+            st.success("✅ 設定を保存しました")
+        else:
+            st.error("❌ 設定の保存に失敗しました")
 
 
 def render_calendar_management_tab():
@@ -992,9 +1057,10 @@ def render_calendar_management_tab():
     auth_manager = get_google_auth_manager()
     
     # タブを作成
-    tab1, tab2, tab3, tab4 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
         "📅 カレンダー", 
         "➕ イベント追加", 
+        "✏️ イベント編集",
         "📊 イベント一覧", 
         "🔄 同期管理"
     ])
@@ -1006,9 +1072,12 @@ def render_calendar_management_tab():
         render_event_add_tab(auth_manager)
     
     with tab3:
-        render_event_list_tab()
+        render_event_edit_tab(auth_manager)
     
     with tab4:
+        render_event_list_tab()
+    
+    with tab5:
         render_calendar_sync_tab(auth_manager)
 
 
@@ -1080,14 +1149,36 @@ def render_event_list_tab():
         st.info("📅 イベントがありません。新しいイベントを追加してください。")
         return
     
+    # 一括編集モードの管理
+    if 'bulk_edit_mode' not in st.session_state:
+        st.session_state.bulk_edit_mode = False
+    if 'selected_events' not in st.session_state:
+        st.session_state.selected_events = set()
+    
+    # 一括編集モード切り替え
+    col1, col2 = st.columns([1, 3])
+    with col1:
+        if st.button("📋 一括編集", key="bulk_edit_toggle"):
+            st.session_state.bulk_edit_mode = not st.session_state.bulk_edit_mode
+            st.session_state.selected_events.clear()
+            st.rerun()
+    
+    with col2:
+        if st.session_state.bulk_edit_mode:
+            st.info("一括編集モード: 複数のイベントを選択して一括で編集できます")
+    
+    # 一括編集フォーム
+    if st.session_state.bulk_edit_mode and st.session_state.selected_events:
+        render_bulk_edit_form(calendar_manager)
+    
     # フィルター
     col1, col2, col3 = st.columns(3)
     with col1:
-        date_filter = st.selectbox("日付", ["全て", "今日", "今週", "今月"], key="event_date_filter")
+        date_filter = st.selectbox("日付", ["全て", "今日", "今週", "今月"], key="list_date_filter")
     with col2:
-        category_filter = st.selectbox("カテゴリ", ["全て"] + list(set([e.get("category", "未分類") for e in events["events"].values()])), key="event_category_filter")
+        category_filter = st.selectbox("カテゴリ", ["全て"] + list(set([e.get("category", "未分類") for e in events["events"].values()])), key="list_category_filter")
     with col3:
-        sync_filter = st.selectbox("同期状態", ["全て", "同期済み", "未同期"], key="event_sync_filter")
+        sync_filter = st.selectbox("同期状態", ["全て", "同期済み", "未同期"], key="list_sync_filter")
     
     # イベントを表示
     for event_id, event in events["events"].items():
@@ -1113,25 +1204,117 @@ def render_event_list_tab():
         elif sync_filter == "未同期" and event.get("google_event_id"):
             continue
         
-        with st.expander(f"📅 {event_date.strftime('%m/%d %H:%M')} - {event.get('title', 'タイトルなし')}"):
-            col1, col2 = st.columns([3, 1])
+        # 一括編集モードの場合
+        if st.session_state.bulk_edit_mode:
+            checkbox_key = f"select_event_{event_id}_{uuid.uuid4().hex[:8]}"
+            is_selected = st.checkbox(
+                f"📅 {event_date.strftime('%m/%d %H:%M')} - {event.get('title', 'タイトルなし')}", 
+                value=event_id in st.session_state.selected_events,
+                key=checkbox_key
+            )
             
-            with col1:
+            if is_selected:
+                st.session_state.selected_events.add(event_id)
+            else:
+                st.session_state.selected_events.discard(event_id)
+            
+            # イベント詳細を展開可能に表示
+            with st.expander("詳細", expanded=False):
                 st.write(f"**説明**: {event.get('description', '説明なし')}")
                 st.write(f"**開始**: {event['start_date']}")
                 st.write(f"**終了**: {event['end_date']}")
                 st.write(f"**カテゴリ**: {event.get('category', '未分類')}")
                 if event.get('google_event_id'):
                     st.write("✅ Googleカレンダーに同期済み")
-            
-            with col2:
-                # 削除ボタン
-                if st.button("🗑️ 削除", key=f"delete_event_{event_id}"):
-                    if calendar_manager.delete_event(event_id):
-                        st.success("イベントを削除しました")
+        
+        else:
+            # 通常表示モード
+            with st.expander(f"📅 {event_date.strftime('%m/%d %H:%M')} - {event.get('title', 'タイトルなし')}"):
+                col1, col2 = st.columns([3, 1])
+                
+                with col1:
+                    st.write(f"**説明**: {event.get('description', '説明なし')}")
+                    st.write(f"**開始**: {event['start_date']}")
+                    st.write(f"**終了**: {event['end_date']}")
+                    st.write(f"**カテゴリ**: {event.get('category', '未分類')}")
+                    if event.get('google_event_id'):
+                        st.write("✅ Googleカレンダーに同期済み")
+                
+                with col2:
+                    # 編集ボタン
+                    edit_key = f"list_edit_event_{event_id}_{uuid.uuid4().hex[:8]}"
+                    if st.button("✏️ 編集", key=edit_key):
+                        st.session_state.editing_event_id = event_id
                         st.rerun()
-                    else:
-                        st.error("イベントの削除に失敗しました")
+                    
+                    # 削除ボタン
+                    delete_key = f"list_delete_event_{event_id}_{uuid.uuid4().hex[:8]}"
+                    if st.button("🗑️ 削除", key=delete_key):
+                        if calendar_manager.delete_event(event_id):
+                            st.success("イベントを削除しました")
+                            st.rerun()
+                        else:
+                            st.error("イベントの削除に失敗しました")
+
+
+def render_bulk_edit_form(calendar_manager):
+    """一括編集フォーム"""
+    st.write("**📋 一括編集**")
+    st.info(f"選択されたイベント数: {len(st.session_state.selected_events)}")
+    
+    with st.form("bulk_edit_form"):
+        st.write("**変更する項目のみチェックしてください**")
+        
+        # 変更項目の選択
+        col1, col2 = st.columns(2)
+        with col1:
+            update_category = st.checkbox("カテゴリを変更", key="bulk_update_category")
+            update_sync = st.checkbox("同期状態を変更", key="bulk_update_sync")
+        
+        with col2:
+            update_all_day = st.checkbox("終日設定を変更", key="bulk_update_all_day")
+            update_description = st.checkbox("説明を変更", key="bulk_update_description")
+        
+        # 変更内容の入力
+        update_data = {}
+        
+        if update_category:
+            new_category = st.selectbox("新しいカテゴリ", ["会議", "予定", "イベント", "その他"], key="bulk_new_category")
+            update_data["category"] = new_category
+        
+        if update_sync:
+            new_sync = st.checkbox("Googleカレンダーに同期", key="bulk_new_sync")
+            # 同期状態の変更は個別に処理する必要があるため、後で実装
+        
+        if update_all_day:
+            new_all_day = st.checkbox("終日", key="bulk_new_all_day")
+            update_data["all_day"] = new_all_day
+        
+        if update_description:
+            new_description = st.text_area("新しい説明", key="bulk_new_description")
+            if new_description.strip():
+                update_data["description"] = new_description
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            submitted = st.form_submit_button("💾 一括更新")
+        with col2:
+            cancel = st.form_submit_button("❌ キャンセル")
+        
+        if submitted and update_data:
+            # 一括更新を実行
+            if calendar_manager.bulk_update_events(list(st.session_state.selected_events), **update_data):
+                st.success(f"✅ {len(st.session_state.selected_events)}個のイベントを更新しました")
+                st.session_state.selected_events.clear()
+                st.session_state.bulk_edit_mode = False
+                st.rerun()
+            else:
+                st.error("❌ 一括更新に失敗しました")
+        
+        elif cancel:
+            st.session_state.selected_events.clear()
+            st.session_state.bulk_edit_mode = False
+            st.rerun()
 
 
 def render_event_add_tab(auth_manager):
@@ -1229,6 +1412,183 @@ def render_event_add_tab(auth_manager):
                         st.warning("⚠️ イベントの取得に失敗しました")
                 elif sync_to_calendar:
                     st.warning("⚠️ Googleカレンダーの認証に失敗しました")
+
+
+def render_event_edit_tab(auth_manager):
+    """イベント編集タブ"""
+    st.write("**✏️ イベント編集**")
+    
+    # CalendarManagerをインスタンス化
+    calendar_manager = CalendarManager()
+    
+    # イベント一覧表示
+    events = calendar_manager.load_events()
+    
+    if not events["events"]:
+        st.info("📅 イベントがありません。新しいイベントを追加してください。")
+        return
+    
+    # 編集モードの管理
+    if 'editing_event_id' not in st.session_state:
+        st.session_state.editing_event_id = None
+    
+    # フィルター
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        date_filter = st.selectbox("日付", ["全て", "今日", "今週", "今月"], key="edit_date_filter")
+    with col2:
+        category_filter = st.selectbox("カテゴリ", ["全て"] + list(set([e.get("category", "未分類") for e in events["events"].values()])), key="edit_category_filter")
+    with col3:
+        sync_filter = st.selectbox("同期状態", ["全て", "同期済み", "未同期"], key="edit_sync_filter")
+    
+    # イベントを表示
+    for event_id, event in events["events"].items():
+        # フィルター適用
+        event_date = datetime.fromisoformat(event["start_date"])
+        
+        if date_filter == "今日" and event_date.date() != datetime.now().date():
+            continue
+        elif date_filter == "今週":
+            week_start = datetime.now().date() - timedelta(days=datetime.now().weekday())
+            week_end = week_start + timedelta(days=6)
+            if not (week_start <= event_date.date() <= week_end):
+                continue
+        elif date_filter == "今月":
+            if event_date.month != datetime.now().month or event_date.year != datetime.now().year:
+                continue
+        
+        if category_filter != "全て" and event.get("category", "未分類") != category_filter:
+            continue
+        
+        if sync_filter == "同期済み" and not event.get("google_event_id"):
+            continue
+        elif sync_filter == "未同期" and event.get("google_event_id"):
+            continue
+        
+        # 編集モードかどうかチェック
+        is_editing = st.session_state.editing_event_id == event_id
+        
+        with st.expander(f"📅 {event_date.strftime('%m/%d %H:%M')} - {event.get('title', 'タイトルなし')}", expanded=is_editing):
+            if is_editing:
+                # 編集フォーム
+                render_event_edit_form(calendar_manager, event_id, event, auth_manager)
+            else:
+                # 表示モード
+                col1, col2 = st.columns([3, 1])
+                
+                with col1:
+                    st.write(f"**説明**: {event.get('description', '説明なし')}")
+                    st.write(f"**開始**: {event['start_date']}")
+                    st.write(f"**終了**: {event['end_date']}")
+                    st.write(f"**カテゴリ**: {event.get('category', '未分類')}")
+                    if event.get('google_event_id'):
+                        st.write("✅ Googleカレンダーに同期済み")
+                
+                with col2:
+                    # 編集ボタン
+                    edit_key = f"edit_event_{event_id}_{uuid.uuid4().hex[:8]}"
+                    if st.button("✏️ 編集", key=edit_key):
+                        st.session_state.editing_event_id = event_id
+                        st.rerun()
+                    
+                    # 削除ボタン
+                    delete_key = f"delete_event_{event_id}_{uuid.uuid4().hex[:8]}"
+                    if st.button("🗑️ 削除", key=delete_key):
+                        if calendar_manager.delete_event(event_id):
+                            st.success("イベントを削除しました")
+                            st.rerun()
+                        else:
+                            st.error("イベントの削除に失敗しました")
+
+
+def render_event_edit_form(calendar_manager, event_id, event, auth_manager):
+    """イベント編集フォーム"""
+    st.write("**イベント編集**")
+    
+    with st.form(f"edit_event_form_{event_id}"):
+        # 現在の値をデフォルトとして設定
+        current_start = datetime.fromisoformat(event["start_date"])
+        current_end = datetime.fromisoformat(event["end_date"])
+        
+        title = st.text_input("イベント名", value=event.get("title", ""), key=f"edit_title_{event_id}")
+        description = st.text_area("説明", value=event.get("description", ""), key=f"edit_description_{event_id}")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            start_date = st.date_input("開始日", value=current_start.date(), key=f"edit_start_date_{event_id}")
+            start_time = st.time_input("開始時刻", value=current_start.time(), key=f"edit_start_time_{event_id}")
+            category = st.selectbox("カテゴリ", ["会議", "予定", "イベント", "その他"], 
+                                  index=["会議", "予定", "イベント", "その他"].index(event.get("category", "その他")), 
+                                  key=f"edit_category_{event_id}")
+        
+        with col2:
+            end_date = st.date_input("終了日", value=current_end.date(), key=f"edit_end_date_{event_id}")
+            end_time = st.time_input("終了時刻", value=current_end.time(), key=f"edit_end_time_{event_id}")
+            all_day = st.checkbox("終日", value=event.get("all_day", False), key=f"edit_all_day_{event_id}")
+        
+        # Googleカレンダー同期オプション
+        sync_to_calendar = st.checkbox("Googleカレンダーに同期", 
+                                     value=bool(event.get("google_event_id")), 
+                                     key=f"edit_sync_calendar_{event_id}")
+        
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            submitted = st.form_submit_button("💾 保存")
+        with col2:
+            cancel = st.form_submit_button("❌ キャンセル")
+        with col3:
+            duplicate = st.form_submit_button("📋 複製")
+        
+        if submitted and title:
+            # 認証状態を確認
+            if sync_to_calendar and (not auth_manager or not auth_manager.is_authenticated()):
+                st.error("Googleカレンダーに同期するには認証が必要です")
+                st.info("カレンダー連携タブでGoogleカレンダー認証を実行してください")
+                return
+            
+            # 日時を結合
+            start_datetime = datetime.combine(start_date, start_time)
+            end_datetime = datetime.combine(end_date, end_time)
+            
+            # イベントを更新
+            update_data = {
+                "title": title,
+                "description": description,
+                "start_date": start_datetime.isoformat(),
+                "end_date": end_datetime.isoformat(),
+                "all_day": all_day,
+                "category": category
+            }
+            
+            if calendar_manager.update_event(event_id, **update_data):
+                st.success("✅ イベントを更新しました")
+                st.session_state.editing_event_id = None
+                st.rerun()
+            else:
+                st.error("❌ イベントの更新に失敗しました")
+        
+        elif cancel:
+            st.session_state.editing_event_id = None
+            st.rerun()
+        
+        elif duplicate:
+            # イベントを複製
+            new_event_id = str(uuid.uuid4())
+            new_event = event.copy()
+            new_event["id"] = new_event_id
+            new_event["title"] = f"{title} (コピー)"
+            new_event["created_at"] = datetime.now().isoformat()
+            new_event["google_event_id"] = None  # 複製時はGoogle同期をリセット
+            
+            events = calendar_manager.load_events()
+            events["events"][new_event_id] = new_event
+            
+            if calendar_manager.save_events(events):
+                st.success("✅ イベントを複製しました")
+                st.session_state.editing_event_id = None
+                st.rerun()
+            else:
+                st.error("❌ イベントの複製に失敗しました")
 
 
 def render_calendar_sync_tab(auth_manager):

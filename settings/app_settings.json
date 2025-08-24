@@ -21,5 +21,12 @@
   "ui": {
     "auto_save_recordings": true,
     "show_advanced_options": false
+  },
+  "task_management": {
+    "auto_sync_to_calendar": false,
+    "default_sync_to_calendar": true,
+    "sync_completed_tasks": false,
+    "calendar_timezone": "Asia/Tokyo",
+    "default_event_duration": 60
   }
 }
