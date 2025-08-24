@@ -582,7 +582,7 @@ class TaskManager:
         self.tasks_file = "settings/tasks.json"
         self.ensure_tasks_directory()
         self.auth_manager = get_google_auth_manager()
-        self.settings_manager = SettingsManager()
+        self.settings_manager = EnhancedSettingsManager()
     
     def ensure_tasks_directory(self) -> None:
         """タスクディレクトリの作成"""

@@ -694,7 +694,7 @@ def render_task_add_tab(auth_manager):
     task_manager = TaskManager()
     
     # 設定マネージャーをインスタンス化
-    settings_manager = SettingsManager()
+    settings_manager = EnhancedSettingsManager()
     settings = settings_manager.load_settings()
     
     # タスク管理設定の初期化
@@ -930,7 +930,7 @@ def render_task_settings_tab():
     task_manager = TaskManager()
     
     # 設定マネージャーをインスタンス化
-    settings_manager = SettingsManager()
+    settings_manager = EnhancedSettingsManager()
     settings = settings_manager.load_settings()
     
     # タスク統計
