@@ -344,11 +344,42 @@ class AudioRecorderApp:
         commands = self.process_commands(transcription)
         if commands:
             st.subheader("🔧 検出されたコマンド")
-            for cmd in commands:
+            
+            # タスク追加コマンドの処理
+            task_commands = [cmd for cmd in commands if cmd.get('command') == 'タスク追加']
+            if task_commands:
+                st.info("📋 タスク追加コマンドが検出されました")
+                
+                # タスク自動生成オプション
+                if st.button("📋 タスクとして保存", key="save_task_commands"):
+                    if self.task_manager:
+                        saved_count = 0
+                        for cmd in task_commands:
+                            if self.task_manager.add_task(
+                                title=cmd.get('title', '無題'),
+                                description=cmd.get('description', ''),
+                                priority=cmd.get('priority', '中'),
+                                category=cmd.get('category', 'その他'),
+                                auto_sync=True  # 自動同期を有効化
+                            ):
+                                saved_count += 1
+                        
+                        if saved_count > 0:
+                            st.success(f"✅ {saved_count}件のタスクを保存しました")
+                            if saved_count > 0:
+                                st.info("💡 タスクは自動的にGoogleカレンダーと同期されます")
+                        else:
+                            st.error("❌ タスクの保存に失敗しました")
+                    else:
+                        st.error("❌ タスクマネージャーが利用できません")
+            
+            # その他のコマンド表示
+            other_commands = [cmd for cmd in commands if cmd.get('command') != 'タスク追加']
+            for cmd in other_commands:
                 with st.expander(f"コマンド: {cmd.get('command', 'Unknown')}"):
                     st.json(cmd)
         
-        # タスク分析結果
+        # タスク分析結果（既存の機能）
         tasks = self.analyze_tasks(transcription)
         if tasks:
             st.subheader("📋 検出されたタスク")

@@ -467,6 +467,150 @@ class CommandManager:
             self.commands["metadata"]["total_commands"] -= 1
             return self.save_commands()
         return False
+    
+    def process_text(self, text: str) -> List[Dict[str, Any]]:
+        """テキストからコマンドを検出・実行"""
+        results = []
+        
+        # タスク追加コマンドの検出
+        task_keywords = ["タスク", "task", "やること", "todo", "TODO", "ToDo"]
+        for keyword in task_keywords:
+            if keyword in text:
+                # タスク追加コマンドを実行
+                task_result = self._process_task_command(text)
+                if task_result:
+                    results.append(task_result)
+                break
+        
+        # その他のコマンド処理
+        for command_name, command_config in self.commands["commands"].items():
+            if command_config.get("enabled", True):
+                if command_name in text:
+                    result = self._execute_command(command_name, command_config, text)
+                    if result:
+                        results.append(result)
+        
+        return results
+    
+    def _process_task_command(self, text: str) -> Dict[str, Any]:
+        """タスク追加コマンドの処理"""
+        try:
+            # タスクタイトルの抽出
+            task_title = self._extract_task_title(text)
+            
+            # タスクの詳細情報を抽出
+            task_info = self._extract_task_info(text)
+            
+            return {
+                "command": "タスク追加",
+                "title": task_title,
+                "description": task_info.get("description", ""),
+                "priority": task_info.get("priority", "中"),
+                "category": task_info.get("category", "その他"),
+                "due_date": task_info.get("due_date"),
+                "original_text": text,
+                "timestamp": datetime.now().isoformat()
+            }
+        except Exception as e:
+            st.error(f"タスクコマンド処理エラー: {e}")
+            return None
+    
+    def _extract_task_title(self, text: str) -> str:
+        """テキストからタスクタイトルを抽出"""
+        # タスクキーワードの後の部分をタイトルとして抽出
+        task_keywords = ["タスク", "task", "やること", "todo", "TODO", "ToDo"]
+        
+        for keyword in task_keywords:
+            if keyword in text:
+                # キーワードの後の部分を取得
+                parts = text.split(keyword, 1)
+                if len(parts) > 1:
+                    title = parts[1].strip()
+                    # 句読点や改行で区切る
+                    title = title.split('。')[0].split('\n')[0].strip()
+                    if title:
+                        return title
+        
+        # キーワードが見つからない場合は最初の文をタイトルとして使用
+        return text.split('。')[0].split('\n')[0].strip()[:50]
+    
+    def _extract_task_info(self, text: str) -> Dict[str, Any]:
+        """テキストからタスクの詳細情報を抽出"""
+        info = {
+            "description": "",
+            "priority": "中",
+            "category": "その他",
+            "due_date": None
+        }
+        
+        # 優先度の検出
+        priority_keywords = {
+            "緊急": "緊急",
+            "高": "高", 
+            "中": "中",
+            "低": "低",
+            "urgent": "緊急",
+            "high": "高",
+            "medium": "中",
+            "low": "低"
+        }
+        
+        for keyword, priority in priority_keywords.items():
+            if keyword in text:
+                info["priority"] = priority
+                break
+        
+        # カテゴリの検出
+        category_keywords = {
+            "仕事": "仕事",
+            "プライベート": "プライベート",
+            "勉強": "勉強",
+            "健康": "健康",
+            "work": "仕事",
+            "private": "プライベート",
+            "study": "勉強",
+            "health": "健康"
+        }
+        
+        for keyword, category in category_keywords.items():
+            if keyword in text:
+                info["category"] = category
+                break
+        
+        # 期限の検出（簡易版）
+        date_keywords = ["期限", "締切", "due", "deadline", "まで"]
+        for keyword in date_keywords:
+            if keyword in text:
+                # 期限の詳細抽出は複雑なので、説明に含める
+                info["description"] = f"期限情報: {text}"
+                break
+        
+        # 説明文の抽出（タイトル以外の部分）
+        task_title = self._extract_task_title(text)
+        if task_title != text:
+            description = text.replace(task_title, "").strip()
+            if description:
+                info["description"] = description
+        
+        return info
+    
+    def _execute_command(self, command_name: str, command_config: Dict[str, Any], text: str) -> Dict[str, Any]:
+        """コマンドを実行"""
+        try:
+            llm_prompt = command_config.get("llm_prompt", "").format(text=text)
+            output_format = command_config.get("output_format", "text")
+            
+            return {
+                "command": command_name,
+                "description": command_config.get("description", ""),
+                "prompt": llm_prompt,
+                "output_format": output_format,
+                "original_text": text,
+                "timestamp": datetime.now().isoformat()
+            }
+        except Exception as e:
+            st.error(f"コマンド実行エラー: {e}")
+            return None
 
 
 class DeviceManager:
