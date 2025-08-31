@@ -587,15 +587,7 @@ class AudioRecorderApp:
         if not client:
             return
         
-        # 環境情報の表示
-        if not PYAUDIO_AVAILABLE:
-            st.info("📝 **録音環境**: Streamlit Cloud環境では直接録音は利用できません")
-            st.info("💡 **録音代替案**: streamlit-audiorecコンポーネントを使用してください")
-            st.info("🎤 **現在の録音方法**: 下の録音ボタンで音声を録音できます")
-        else:
-            st.success("✅ **録音環境**: ローカル環境で録音機能が利用可能です")
-            st.info("🎤 **録音方法**: 下の録音ボタンまたはstreamlit-audiorecコンポーネントを使用")
-        
+        # 環境情報の表示（シンプル化）
         if not OPENAI_AVAILABLE:
             st.warning("⚠️ **AI環境**: OpenAI APIが利用できません")
             st.info("💡 **AI代替案**: OpenAI APIキーを設定してください")
