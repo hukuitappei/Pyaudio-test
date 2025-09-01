@@ -1655,9 +1655,50 @@ def render_calendar_sync_tab(auth_manager):
                                     else:
                                         st.error("❌ 認証情報の更新に失敗しました")
                                         st.info("新しいリフレッシュトークンが必要です")
-                                else:
-                                    st.error("❌ 認証情報更新機能が利用できません")
-                                    st.info("認証フローをリセットして再認証してください")
+                                        st.info("以下の手順を実行してください：")
+                                        st.info("1. 認証フローをリセット")
+                                        st.info("2. 新しい認証を実行")
+                                        st.info("3. 新しいリフレッシュトークンを取得")
+                                        
+                                        # 詳細診断情報
+                                        with st.expander("🔍 詳細診断情報", expanded=False):
+                                            st.write("**現在の認証情報状況:**")
+                                            try:
+                                                from config.config_manager import check_google_credentials
+                                                credentials_status = check_google_credentials()
+                                                
+                                                col1, col2, col3 = st.columns(3)
+                                                with col1:
+                                                    if credentials_status['client_id']['exists']:
+                                                        st.success("✅ Client ID")
+                                                    else:
+                                                        st.error("❌ Client ID")
+                                                
+                                                with col2:
+                                                    if credentials_status['client_secret']['exists']:
+                                                        st.success("✅ Client Secret")
+                                                    else:
+                                                        st.error("❌ Client Secret")
+                                                
+                                                with col3:
+                                                    if credentials_status['refresh_token']['exists']:
+                                                        st.warning("⚠️ Refresh Token（無効）")
+                                                    else:
+                                                        st.error("❌ Refresh Token")
+                                                
+                                                st.write("**推奨される対処法:**")
+                                                if not credentials_status['client_id']['exists'] or not credentials_status['client_secret']['exists']:
+                                                    st.error("1. Google Cloud ConsoleでOAuth 2.0クライアントIDを確認")
+                                                    st.error("2. Streamlit Secretsに正しい認証情報を設定")
+                                                elif not credentials_status['refresh_token']['exists']:
+                                                    st.error("1. 初回認証を実行してリフレッシュトークンを取得")
+                                                    st.error("2. 取得したトークンをStreamlit Secretsに設定")
+                                                else:
+                                                    st.warning("1. リフレッシュトークンが無効化されている可能性があります")
+                                                    st.warning("2. 新しい認証を実行してください")
+                                                    
+                                            except Exception as diag_error:
+                                                st.error(f"診断情報の取得に失敗: {diag_error}")
                             except Exception as refresh_error:
                                 st.error(f"❌ 認証情報更新エラー: {refresh_error}")
                     
@@ -1871,7 +1912,7 @@ def render_statistics_tab():
         st.metric("📝 文字起こし回数", _get_transcription_count())
     
     with col2:
-        st.metric("🎵 録音ファイル数", _get_recording_count())
+        st.metric("�� 録音ファイル数", _get_recording_count())
     
     with col3:
         st.metric("📋 タスク数", _get_task_count())

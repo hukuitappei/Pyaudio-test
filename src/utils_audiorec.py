@@ -1760,11 +1760,22 @@ class GoogleAuthManager:
         try:
             st.info("🔄 認証情報を更新中...")
             
-            # 認証情報を取得
-            client_id, client_secret, refresh_token = get_google_credentials()
+            # config_managerから認証情報を取得
+            try:
+                from config.config_manager import get_secret
+                client_id = get_secret('GOOGLE_CLIENT_ID')
+                client_secret = get_secret('GOOGLE_CLIENT_SECRET')
+                refresh_token = get_secret('GOOGLE_REFRESH_TOKEN')
+            except ImportError:
+                st.error("❌ config_managerが利用できません")
+                return False
+            except Exception as e:
+                st.error(f"❌ 認証情報の取得に失敗: {e}")
+                return False
             
             if not client_id or not client_secret:
                 st.error("❌ 基本認証情報が不足しています")
+                st.info("GOOGLE_CLIENT_IDとGOOGLE_CLIENT_SECRETを設定してください")
                 return False
             
             if not refresh_token:
@@ -1772,10 +1783,13 @@ class GoogleAuthManager:
                 st.info("初回認証を実行してください")
                 return False
             
+            st.info("🔑 認証情報を検証中...")
+            
             # 新しい認証情報を作成
             creds = self._create_credentials_from_refresh_token(client_id, client_secret, refresh_token)
             
             if not creds:
+                st.error("❌ 認証情報の作成に失敗しました")
                 return False
             
             # 認証情報を更新
@@ -1784,11 +1798,22 @@ class GoogleAuthManager:
             st.session_state.google_auth_status = True
             self.service = build('calendar', 'v3', credentials=creds)
             
+            # 接続テストを実行
+            try:
+                st.info("🔍 接続テストを実行中...")
+                test_service = build('calendar', 'v3', credentials=creds)
+                calendar_list = test_service.calendarList().list().execute()
+                st.success(f"✅ 接続テスト成功（利用可能カレンダー: {len(calendar_list.get('items', []))}個）")
+            except Exception as test_error:
+                st.error(f"❌ 接続テストに失敗: {test_error}")
+                return False
+            
             st.success("✅ 認証情報の更新が完了しました")
             return True
             
         except Exception as e:
             st.error(f"❌ 認証情報の更新に失敗: {e}")
+            st.exception(e)
             return False
 
 
