@@ -1646,23 +1646,43 @@ def render_calendar_sync_tab(auth_manager):
                     # 認証情報更新ボタン
                     col1, col2 = st.columns(2)
                     with col1:
-                        if st.button("🔄 認証情報を更新", key=f"refresh_credentials_{uuid.uuid4().hex[:8]}"):
+                        if st.button("🔄 認証情報を更新", key="refresh_credentials_fixed"):
                             try:
-                                if auth_manager.refresh_credentials():
-                                    st.success("✅ 認証情報の更新が完了しました")
-                                    st.rerun()
+                                if hasattr(auth_manager, 'refresh_credentials'):
+                                    if auth_manager.refresh_credentials():
+                                        st.success("✅ 認証情報の更新が完了しました")
+                                        st.rerun()
+                                    else:
+                                        st.error("❌ 認証情報の更新に失敗しました")
+                                        st.info("新しいリフレッシュトークンが必要です")
                                 else:
-                                    st.error("❌ 認証情報の更新に失敗しました")
-                                    st.info("新しいリフレッシュトークンが必要です")
+                                    st.error("❌ 認証情報更新機能が利用できません")
+                                    st.info("認証フローをリセットして再認証してください")
                             except Exception as refresh_error:
                                 st.error(f"❌ 認証情報更新エラー: {refresh_error}")
                     
                     with col2:
-                        if st.button("🔄 認証フローをリセット", key=f"reset_auth_flow_{uuid.uuid4().hex[:8]}"):
+                        if st.button("🔄 認証フローをリセット", key="reset_auth_flow_fixed"):
                             try:
-                                auth_manager._reset_auth_flow()
+                                # セッション状態をクリア
+                                if 'google_auth_flow' in st.session_state:
+                                    del st.session_state.google_auth_flow
+                                if 'google_auth_url' in st.session_state:
+                                    del st.session_state.google_auth_url
+                                if 'google_auth_key' in st.session_state:
+                                    del st.session_state.google_auth_key
+                                if 'google_credentials' in st.session_state:
+                                    del st.session_state.google_credentials
+                                if 'google_auth_status' in st.session_state:
+                                    st.session_state.google_auth_status = False
+                                
                                 st.success("✅ 認証フローがリセットされました")
-                                st.rerun()
+                                st.info("ページを再読み込みして認証状態を確認してください")
+                                
+                                # ページ再読み込みボタン
+                                if st.button("🔄 ページを再読み込み", key="reload_page_after_reset"):
+                                    st.rerun()
+                                
                             except Exception as reset_error:
                                 st.error(f"❌ 認証フローリセットエラー: {reset_error}")
                 else:
@@ -1715,7 +1735,7 @@ def render_calendar_sync_tab(auth_manager):
         
         # Google認証ボタン
         st.subheader("🔐 Google認証")
-        if st.button("🔐 Googleカレンダー認証", key=f"google_auth_button_{uuid.uuid4().hex[:8]}"):
+        if st.button("🔐 Googleカレンダー認証", key="google_auth_button_fixed"):
             try:
                 st.info("🔄 認証を開始しています...")
                 auth_result = auth_manager.authenticate()
@@ -1769,7 +1789,7 @@ def render_calendar_sync_tab(auth_manager):
                     st.write(f"📅 {event['start_date'][:10]}")
                 
                 with col3:
-                    sync_key = f"sync_event_{event_id}_{uuid.uuid4().hex[:8]}"
+                    sync_key = f"sync_event_{event_id}"
                     if st.button("📅 同期", key=sync_key):
                         if calendar_manager.sync_to_google_calendar(event_id):
                             st.success("✅ 同期完了")
@@ -1779,7 +1799,7 @@ def render_calendar_sync_tab(auth_manager):
             
             # 一括同期
             st.write("### 一括操作")
-            if st.button("📅 未同期イベントを一括同期", key=f"bulk_sync_events_{uuid.uuid4().hex[:8]}"):
+            if st.button("📅 未同期イベントを一括同期", key="bulk_sync_events_fixed"):
                 service = auth_manager.get_service()
                 if service:
                     synced_count = 0
@@ -1799,8 +1819,16 @@ def render_calendar_sync_tab(auth_manager):
     
     # 認証解除
     st.subheader("🔓 認証管理")
-    if st.button("🚪 ログアウト", key=f"logout_google_{uuid.uuid4().hex[:8]}"):
-        auth_manager.logout()
+    if st.button("🚪 ログアウト", key="logout_google_fixed"):
+        if hasattr(auth_manager, 'logout'):
+            auth_manager.logout()
+        else:
+            # セッション状態をクリア
+            if 'google_credentials' in st.session_state:
+                del st.session_state.google_credentials
+            if 'google_auth_status' in st.session_state:
+                st.session_state.google_auth_status = False
+        
         st.success("ログアウトしました")
         st.rerun()
 
