@@ -1695,7 +1695,7 @@ class GoogleAuthManager:
             return None
         
         try:
-            # リフレッシュトークンから認証情報を作成
+            # 認証情報を作成
             creds = Credentials(
                 token=None,
                 refresh_token=refresh_token,
@@ -1705,17 +1705,91 @@ class GoogleAuthManager:
                 scopes=self.SCOPES
             )
             
-            # トークンをリフレッシュ
+            # トークンの有効性を確認
             if creds.expired:
-                st.info("🔄 アクセストークンを更新中...")
-                creds.refresh(Request())
-                st.success("✅ アクセストークンを更新しました")
+                try:
+                    st.info("🔄 トークンを更新中...")
+                    creds.refresh(Request())
+                    st.success("✅ トークンの更新が完了しました")
+                except Exception as refresh_error:
+                    if "invalid_grant" in str(refresh_error):
+                        st.error("❌ リフレッシュトークンが無効です")
+                        st.info("🔑 新しいリフレッシュトークンが必要です")
+                        st.info("以下の手順で新しいトークンを取得してください：")
+                        st.info("1. 認証フローをリセット")
+                        st.info("2. 新しい認証を実行")
+                        st.info("3. 新しいリフレッシュトークンを取得")
+                        
+                        # 認証フローをリセット
+                        if st.button("🔄 認証フローをリセット", key="reset_auth_for_invalid_token"):
+                            self._reset_auth_flow()
+                            st.rerun()
+                        return None
+                    else:
+                        st.error(f"❌ トークン更新エラー: {refresh_error}")
+                        return None
             
             return creds
+            
         except Exception as e:
-            st.error(f"リフレッシュトークンからの認証情報作成に失敗しました: {e}")
-            st.info("リフレッシュトークンが無効な可能性があります。初回認証を再実行してください。")
+            st.error(f"❌ リフレッシュトークンからの認証情報作成に失敗: {e}")
             return None
+    
+    def _reset_auth_flow(self) -> None:
+        """認証フローをリセット"""
+        # セッション状態をクリア
+        if 'google_auth_flow' in st.session_state:
+            del st.session_state.google_auth_flow
+        if 'google_auth_url' in st.session_state:
+            del st.session_state.google_auth_url
+        if 'google_auth_key' in st.session_state:
+            del st.session_state.google_auth_key
+        if 'google_credentials' in st.session_state:
+            del st.session_state.google_credentials
+        if 'google_auth_status' in st.session_state:
+            st.session_state.google_auth_status = False
+        
+        # 認証情報をクリア
+        self.credentials = None
+        self.service = None
+        
+        st.success("✅ 認証フローがリセットされました")
+    
+    def refresh_credentials(self) -> bool:
+        """認証情報を強制的に更新"""
+        try:
+            st.info("🔄 認証情報を更新中...")
+            
+            # 認証情報を取得
+            client_id, client_secret, refresh_token = get_google_credentials()
+            
+            if not client_id or not client_secret:
+                st.error("❌ 基本認証情報が不足しています")
+                return False
+            
+            if not refresh_token:
+                st.warning("⚠️ リフレッシュトークンが設定されていません")
+                st.info("初回認証を実行してください")
+                return False
+            
+            # 新しい認証情報を作成
+            creds = self._create_credentials_from_refresh_token(client_id, client_secret, refresh_token)
+            
+            if not creds:
+                return False
+            
+            # 認証情報を更新
+            self.credentials = creds
+            st.session_state.google_credentials = creds
+            st.session_state.google_auth_status = True
+            self.service = build('calendar', 'v3', credentials=creds)
+            
+            st.success("✅ 認証情報の更新が完了しました")
+            return True
+            
+        except Exception as e:
+            st.error(f"❌ 認証情報の更新に失敗: {e}")
+            return False
 
 
 # グローバル認証マネージャーインスタンス

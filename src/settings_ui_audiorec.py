@@ -1638,7 +1638,35 @@ def render_calendar_sync_tab(auth_manager):
                 calendar_list = service.calendarList().list().execute()
                 st.success(f"✅ Googleカレンダーに接続済み（利用可能カレンダー: {len(calendar_list.get('items', []))}個）")
             except Exception as e:
-                st.warning(f"⚠️ カレンダー接続テストに失敗: {e}")
+                error_msg = str(e)
+                if "invalid_grant" in error_msg or "Token has been expired" in error_msg:
+                    st.error("❌ トークンが期限切れまたは無効化されています")
+                    st.info("🔑 認証情報の更新が必要です")
+                    
+                    # 認証情報更新ボタン
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        if st.button("🔄 認証情報を更新", key=f"refresh_credentials_{uuid.uuid4().hex[:8]}"):
+                            try:
+                                if auth_manager.refresh_credentials():
+                                    st.success("✅ 認証情報の更新が完了しました")
+                                    st.rerun()
+                                else:
+                                    st.error("❌ 認証情報の更新に失敗しました")
+                                    st.info("新しいリフレッシュトークンが必要です")
+                            except Exception as refresh_error:
+                                st.error(f"❌ 認証情報更新エラー: {refresh_error}")
+                    
+                    with col2:
+                        if st.button("🔄 認証フローをリセット", key=f"reset_auth_flow_{uuid.uuid4().hex[:8]}"):
+                            try:
+                                auth_manager._reset_auth_flow()
+                                st.success("✅ 認証フローがリセットされました")
+                                st.rerun()
+                            except Exception as reset_error:
+                                st.error(f"❌ 認証フローリセットエラー: {reset_error}")
+                else:
+                    st.warning(f"⚠️ カレンダー接続テストに失敗: {e}")
         else:
             st.warning("⚠️ カレンダーサービスに接続できません")
     else:
