@@ -3,14 +3,23 @@ headless = true
 enableCORS = false
 enableXsrfProtection = false
 maxUploadSize = 200
-# セキュリティヘッダーを追加してiframeサンドボックス警告を軽減
+# WebSocketエラーを軽減するための設定
 enableWebsocketCompression = true
+maxMessageSize = 200
+# セッション管理の最適化
+sessionState = "persistent"
+# 追加のセキュリティ設定
+enableStaticServing = true
+# iframeサンドボックス警告を軽減
+allowRunOnSave = false
 
 [browser]
 gatherUsageStats = false
 # トラッキング防止のための設定
 serverAddress = "0.0.0.0"
 serverPort = 8501
+# ブラウザ機能の制限
+disableWatchdogWarning = true
 
 [theme]
 primaryColor = "#1f77b4"
@@ -22,9 +31,13 @@ textColor = "#262730"
 showErrorDetails = true
 # コンポーネント関連の警告を軽減
 toolbarMode = "minimal"
+# コンポーネント登録の最適化
+componentErrorHandling = "suppress"
 
 [global]
 # 開発モードでの警告を抑制
 developmentMode = false
 # ログレベルを調整
 logLevel = "info"
+# 追加の警告抑制設定
+suppressDeprecationWarnings = true

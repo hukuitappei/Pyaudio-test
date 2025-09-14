@@ -3,6 +3,12 @@ Streamlit Cloud対応音声録音・文字起こしアプリ（拡張版）
 streamlit-audiorec + OpenAI Whisper API + 豊富な設定機能
 """
 
+# 警告抑制の設定
+import warnings
+warnings.filterwarnings("ignore", category=DeprecationWarning)
+warnings.filterwarnings("ignore", category=FutureWarning)
+warnings.filterwarnings("ignore", category=UserWarning)
+
 # 標準ライブラリ
 import base64
 import io
