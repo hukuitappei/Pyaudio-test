@@ -1677,9 +1677,33 @@ class GoogleAuthManager:
             key=f"complete_google_auth_{st.session_state.google_auth_key}"
         ):
             try:
+                st.info("🔄 認証コードを処理中...")
+                
+                # 認証フローの存在確認
+                if 'google_auth_flow' not in st.session_state:
+                    st.error("❌ 認証フローが見つかりません")
+                    st.info("認証フローをリセットして再試行してください")
+                    return None
+                
                 flow = st.session_state.google_auth_flow
+                
+                # 認証コードの形式チェック
+                if not auth_code or len(auth_code.strip()) == 0:
+                    st.error("❌ 認証コードが入力されていません")
+                    return None
+                
+                # 認証コードの前後の空白を削除
+                auth_code = auth_code.strip()
+                
+                st.info(f"🔍 認証コード: {auth_code[:10]}...")
+                
+                # トークンの取得
                 flow.fetch_token(code=auth_code)
                 creds = flow.credentials
+                
+                if not creds:
+                    st.error("❌ 認証情報の取得に失敗しました")
+                    return None
                 
                 # リフレッシュトークンを表示（ユーザーが環境変数に設定するため）
                 if creds.refresh_token:
@@ -1704,11 +1728,32 @@ class GoogleAuthManager:
                 else:
                     st.error("❌ リフレッシュトークンが取得できませんでした")
                     st.info("認証スコープに'offline_access'が含まれているか確認してください")
+                    st.info("認証時に'consent'プロンプトが表示されたか確認してください")
                     return None
                     
             except Exception as e:
-                st.error(f"認証完了エラー: {e}")
-                st.info("認証コードが正しく入力されているか確認してください")
+                error_msg = str(e)
+                st.error(f"❌ 認証完了エラー: {error_msg}")
+                
+                # 具体的なエラーメッセージに基づく対処法を表示
+                if "invalid_grant" in error_msg:
+                    st.info("🔍 認証コードが無効または期限切れです")
+                    st.info("新しい認証コードを取得してください")
+                elif "redirect_uri_mismatch" in error_msg:
+                    st.info("🔍 リダイレクトURIが一致しません")
+                    st.info("Google Cloud Consoleの設定を確認してください")
+                elif "invalid_client" in error_msg:
+                    st.info("🔍 クライアントIDまたはクライアントシークレットが無効です")
+                    st.info("Streamlit Secretsの設定を確認してください")
+                else:
+                    st.info("🔍 認証コードが正しく入力されているか確認してください")
+                    st.info("認証コードは一度しか使用できません")
+                
+                st.info("💡 対処法:")
+                st.info("1. 認証フローをリセット")
+                st.info("2. 新しい認証URLを生成")
+                st.info("3. 新しい認証コードを取得")
+                
                 return None
         
         return None
