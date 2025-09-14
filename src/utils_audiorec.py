@@ -725,8 +725,20 @@ class TaskManager:
     def __init__(self):
         self.tasks_file = "settings/tasks.json"
         self.ensure_tasks_directory()
-        self.auth_manager = get_google_auth_manager()
-        self.settings_manager = EnhancedSettingsManager()
+        
+        # Google認証マネージャーの初期化（エラーハンドリング付き）
+        try:
+            self.auth_manager = get_google_auth_manager()
+        except Exception as e:
+            st.warning(f"Google認証マネージャーの初期化に失敗: {e}")
+            self.auth_manager = None
+        
+        # 設定マネージャーの初期化（エラーハンドリング付き）
+        try:
+            self.settings_manager = EnhancedSettingsManager()
+        except Exception as e:
+            st.warning(f"設定マネージャーの初期化に失敗: {e}")
+            self.settings_manager = None
     
     def ensure_tasks_directory(self) -> None:
         """タスクディレクトリの作成"""
@@ -919,7 +931,28 @@ class TaskManager:
             return True
             
         except Exception as e:
-            st.error(f"Googleカレンダー同期エラー: {e}")
+            error_msg = str(e)
+            if "invalid_grant" in error_msg or "Token has been expired" in error_msg:
+                st.error("❌ トークンが期限切れまたは無効化されています")
+                st.info("🔑 認証情報の更新が必要です")
+                
+                # 自動復旧を試行
+                try:
+                    st.info("🔄 自動復旧を試行中...")
+                    # 認証状態をリセット
+                    st.session_state.google_auth_status = False
+                    st.session_state.google_credentials = None
+                    
+                    # 新しい認証を試行
+                    if self.auth_manager.authenticate():
+                        st.success("✅ 自動復旧が完了しました。再度同期を試行してください")
+                        return False  # 再試行を促す
+                    else:
+                        st.warning("⚠️ 自動復旧に失敗しました。手動での認証更新が必要です")
+                except Exception as auto_recovery_error:
+                    st.warning(f"⚠️ 自動復旧エラー: {auto_recovery_error}")
+            else:
+                st.error(f"Googleカレンダー同期エラー: {e}")
             return False
 
 
@@ -1187,7 +1220,28 @@ class CalendarManager:
             return True
             
         except Exception as e:
-            st.error(f"Googleカレンダー同期エラー: {e}")
+            error_msg = str(e)
+            if "invalid_grant" in error_msg or "Token has been expired" in error_msg:
+                st.error("❌ トークンが期限切れまたは無効化されています")
+                st.info("🔑 認証情報の更新が必要です")
+                
+                # 自動復旧を試行
+                try:
+                    st.info("🔄 自動復旧を試行中...")
+                    # 認証状態をリセット
+                    st.session_state.google_auth_status = False
+                    st.session_state.google_credentials = None
+                    
+                    # 新しい認証を試行
+                    if self.auth_manager.authenticate():
+                        st.success("✅ 自動復旧が完了しました。再度同期を試行してください")
+                        return False  # 再試行を促す
+                    else:
+                        st.warning("⚠️ 自動復旧に失敗しました。手動での認証更新が必要です")
+                except Exception as auto_recovery_error:
+                    st.warning(f"⚠️ 自動復旧エラー: {auto_recovery_error}")
+            else:
+                st.error(f"Googleカレンダー同期エラー: {e}")
             return False
 
 
@@ -1437,8 +1491,17 @@ class GoogleAuthManager:
             if self.credentials.refresh_token:
                 try:
                     self.credentials.refresh(Request())
+                    # セッション状態を更新
+                    st.session_state.google_credentials = self.credentials
                     return True
-                except Exception:
+                except Exception as e:
+                    error_msg = str(e)
+                    if "invalid_grant" in error_msg or "Token has been expired" in error_msg:
+                        # トークンが無効な場合は認証状態をリセット
+                        st.session_state.google_auth_status = False
+                        st.session_state.google_credentials = None
+                        self.credentials = None
+                        self.service = None
                     return False
             return False
         
@@ -1941,8 +2004,17 @@ class GoogleCalendarManager:
             if self.credentials.refresh_token:
                 try:
                     self.credentials.refresh(Request())
+                    # セッション状態を更新
+                    st.session_state.google_credentials = self.credentials
                     return True
-                except Exception:
+                except Exception as e:
+                    error_msg = str(e)
+                    if "invalid_grant" in error_msg or "Token has been expired" in error_msg:
+                        # トークンが無効な場合は認証状態をリセット
+                        st.session_state.google_auth_status = False
+                        st.session_state.google_credentials = None
+                        self.credentials = None
+                        self.service = None
                     return False
             return False
         

@@ -732,9 +732,31 @@ def main():
         app = AudioRecorderApp()
         app.run()
     except Exception as e:
-        st.error(f"アプリケーション実行エラー: {e}")
-        st.info("ページを再読み込みしてください")
-        st.exception(e)
+        error_msg = str(e)
+        
+        # Google認証関連のエラーの場合は特別な処理
+        if "invalid_grant" in error_msg or "Token has been expired" in error_msg:
+            st.error("❌ Google認証エラーが発生しました")
+            st.info("🔑 認証情報の更新が必要です")
+            st.info("以下の手順で問題を解決してください：")
+            st.info("1. カレンダー管理タブに移動")
+            st.info("2. 「🔄 認証フローをリセット」ボタンをクリック")
+            st.info("3. 新しい認証を実行")
+            st.info("4. ページを再読み込み")
+            
+            # 基本的なアプリケーション機能のみで起動
+            try:
+                st.warning("⚠️ 基本機能のみでアプリケーションを起動します")
+                app = AudioRecorderApp()
+                app.run()
+            except Exception as fallback_error:
+                st.error(f"❌ 基本機能での起動にも失敗: {fallback_error}")
+                st.info("ページを再読み込みしてください")
+                st.exception(fallback_error)
+        else:
+            st.error(f"アプリケーション実行エラー: {e}")
+            st.info("ページを再読み込みしてください")
+            st.exception(e)
 
 
 if __name__ == "__main__":

@@ -1643,6 +1643,25 @@ def render_calendar_sync_tab(auth_manager):
                     st.error("❌ トークンが期限切れまたは無効化されています")
                     st.info("🔑 認証情報の更新が必要です")
                     
+                    # 自動復旧を試行
+                    st.info("🔄 自動復旧を試行中...")
+                    try:
+                        # 認証状態をリセット
+                        st.session_state.google_auth_status = False
+                        st.session_state.google_credentials = None
+                        
+                        # 新しい認証を試行
+                        if hasattr(auth_manager, 'authenticate'):
+                            if auth_manager.authenticate():
+                                st.success("✅ 自動復旧が完了しました")
+                                st.rerun()
+                            else:
+                                st.warning("⚠️ 自動復旧に失敗しました。手動での認証更新が必要です")
+                        else:
+                            st.warning("⚠️ 認証マネージャーが利用できません")
+                    except Exception as auto_recovery_error:
+                        st.warning(f"⚠️ 自動復旧エラー: {auto_recovery_error}")
+                    
                     # 認証情報更新ボタン
                     col1, col2 = st.columns(2)
                     with col1:
