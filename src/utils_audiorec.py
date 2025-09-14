@@ -1570,7 +1570,7 @@ class GoogleAuthManager:
         self._initialize_session_state()
         
         # 認証フローの管理
-        if 'google_auth_flow' not in st.session_state:
+        if 'google_auth_flow' not in st.session_state or not st.session_state.google_auth_url:
             try:
                 # 認証情報の詳細チェック
                 st.info(f"🔍 認証情報チェック:")
@@ -1601,7 +1601,7 @@ class GoogleAuthManager:
                 )
                 
                 st.info("🔗 認証URLを生成中...")
-                auth_url, _ = flow.authorization_url(
+                auth_url, state = flow.authorization_url(
                     prompt='consent',
                     access_type='offline',
                     include_granted_scopes='true'
@@ -1609,18 +1609,21 @@ class GoogleAuthManager:
                 
                 if not auth_url:
                     st.error("❌ 認証URLの生成に失敗しました")
+                    st.info("認証情報の形式を確認してください")
                     return None
                 
                 # セッション状態に保存
                 st.session_state.google_auth_flow = flow
                 st.session_state.google_auth_url = auth_url
-                st.session_state.google_auth_key = uuid.uuid4().hex[:8]
+                st.session_state.google_auth_key = state or uuid.uuid4().hex[:8]
                 
                 st.success("✅ 認証フローの初期化が完了しました")
+                st.info(f"🔗 認証URL: {auth_url[:50]}...")
                 
             except Exception as e:
                 st.error(f"❌ 認証フローの初期化に失敗しました: {e}")
                 st.info("認証情報が正しく設定されているか確認してください")
+                st.info(f"デバッグ情報: client_id={client_id[:10] if client_id else 'None'}..., client_secret={client_secret[:10] if client_secret else 'None'}...")
                 return None
         
         # 認証URLの表示
@@ -1641,13 +1644,27 @@ class GoogleAuthManager:
         
         # 認証フローをリセットするボタン
         if st.button("🔄 認証フローをリセット", key=f"reset_auth_flow_{st.session_state.google_auth_key}"):
+            # セッション状態をクリア
             if 'google_auth_flow' in st.session_state:
                 del st.session_state.google_auth_flow
             if 'google_auth_url' in st.session_state:
                 del st.session_state.google_auth_url
             if 'google_auth_key' in st.session_state:
                 del st.session_state.google_auth_key
+            if 'google_credentials' in st.session_state:
+                del st.session_state.google_credentials
+            if 'google_auth_status' in st.session_state:
+                st.session_state.google_auth_status = False
+            
+            st.success("✅ 認証フローがリセットされました")
+            st.info("ページを再読み込みして認証状態を確認してください")
             st.rerun()
+        
+        # 認証フローの状態を表示
+        st.info("🔍 認証フロー状態:")
+        st.info(f"- 認証フロー: {'✅ 初期化済み' if st.session_state.get('google_auth_flow') else '❌ 未初期化'}")
+        st.info(f"- 認証URL: {'✅ 生成済み' if st.session_state.get('google_auth_url') else '❌ 未生成'}")
+        st.info(f"- 認証キー: {st.session_state.get('google_auth_key', '未設定')}")
         
         # 認証コード入力（固定キーを使用）
         auth_code = st.text_input(
@@ -2089,8 +2106,8 @@ class GoogleCalendarManager:
         st.info("2. Google認証を実行してリフレッシュトークンを取得")
         st.info("3. 取得したリフレッシュトークンをStreamlit Secretsに設定")
         
-        # 方法2: 手動での認証URL生成
-        st.subheader("方法2: 手動での認証URL生成")
+        # 方法2: Streamlit Cloud用認証フロー
+        st.subheader("方法2: Streamlit Cloud用認証フロー")
         
         # 認証URLを生成
         try:
@@ -2100,7 +2117,10 @@ class GoogleCalendarManager:
                     "client_secret": client_secret,
                     "auth_uri": "https://accounts.google.com/o/oauth2/auth",
                     "token_uri": "https://oauth2.googleapis.com/token",
-                    "redirect_uris": ["urn:ietf:wg:oauth:2.0:oob"]
+                    "redirect_uris": [
+                        "https://pyaudio-test-8fnqhyhtvx8vlgz2mzkocy.streamlit.app/",
+                        "urn:ietf:wg:oauth:2.0:oob"
+                    ]
                 }
             }
             
@@ -2110,29 +2130,39 @@ class GoogleCalendarManager:
                 redirect_uri="urn:ietf:wg:oauth:2.0:oob"
             )
             
-            auth_url, _ = flow.authorization_url(prompt='consent')
+            auth_url, state = flow.authorization_url(
+                access_type='offline',
+                prompt='consent',
+                include_granted_scopes='true'
+            )
+            
+            # セッション状態に保存
+            st.session_state.google_auth_flow = flow
+            st.session_state.google_auth_key = state
             
             if auth_url:
                 st.success("✅ 認証URLが生成されました")
-                st.info("以下のURLを新しいタブで開いて認証を完了してください：")
+                st.markdown("### 📋 認証手順")
+                st.markdown("1. 以下の認証URLをクリックしてください")
+                st.markdown("2. Google認証画面でアプリケーションを承認してください")
+                st.markdown("3. 認証完了後、表示される認証コードをコピーしてください")
+                st.markdown("4. 下の入力欄に認証コードを貼り付けてください")
                 
-                # 認証URLを表示
-                st.markdown(f"**認証URL**: {auth_url}")
-                
-                # 認証URLをクリック可能なボタンとして表示
-                if st.button("🔗 認証URLを新しいタブで開く", key="open_auth_url_streamlit_cloud"):
-                    st.markdown(f"[Google認証画面を開く]({auth_url})")
-                
-                st.info("認証が完了したら、表示された認証コードを下に入力してください：")
+                # 認証URLをクリック可能なリンクとして表示
+                st.markdown(f"**[🔗 認証URLをクリック]({auth_url})**")
                 
                 # 認証コード入力
+                st.markdown("### 🔑 認証コードの入力")
                 auth_code = st.text_input(
                     "認証コードを入力してください:", 
-                    key="google_auth_code_streamlit_cloud"
+                    key="google_auth_code_streamlit_cloud",
+                    placeholder="認証完了後に表示されるコードを貼り付けてください",
+                    help="Google認証画面で認証を完了すると、認証コードが表示されます。そのコードをコピーしてここに貼り付けてください。"
                 )
                 
                 if auth_code and st.button("認証を完了", key="complete_google_auth_streamlit_cloud"):
                     try:
+                        st.info("🔄 認証コードを処理中...")
                         flow.fetch_token(code=auth_code)
                         creds = flow.credentials
                         
