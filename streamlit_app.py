@@ -735,6 +735,32 @@ def main():
     except Exception as e:
         st.sidebar.warning(f"音声処理ライブラリ状況の確認エラー: {e}")
     
+    # Google認証状態の自動チェックとリセット
+    try:
+        if UTILS_AVAILABLE:
+            from src.utils_audiorec import get_google_auth_manager
+            auth_manager = get_google_auth_manager()
+            
+            if auth_manager:
+                # 認証状態をチェック
+                if st.session_state.get('google_auth_status', False):
+                    # 認証情報の有効性をチェック
+                    if not auth_manager._check_credentials_validity():
+                        # 無効な認証状態をリセット
+                        st.session_state.google_auth_status = False
+                        st.session_state.google_credentials = None
+                        if 'google_auth_flow' in st.session_state:
+                            del st.session_state.google_auth_flow
+                        if 'google_auth_url' in st.session_state:
+                            del st.session_state.google_auth_url
+                        if 'google_auth_key' in st.session_state:
+                            del st.session_state.google_auth_key
+                        
+                        st.info("🔄 無効な認証状態を自動リセットしました")
+    except Exception as e:
+        # 認証状態チェックのエラーは無視して続行
+        pass
+    
     # アプリケーション実行
     try:
         app = AudioRecorderApp()
@@ -751,6 +777,18 @@ def main():
             st.info("2. 「🔄 認証フローをリセット」ボタンをクリック")
             st.info("3. 新しい認証を実行")
             st.info("4. ページを再読み込み")
+            
+            # 認証状態を完全にリセット
+            st.session_state.google_auth_status = False
+            st.session_state.google_credentials = None
+            if 'google_auth_flow' in st.session_state:
+                del st.session_state.google_auth_flow
+            if 'google_auth_url' in st.session_state:
+                del st.session_state.google_auth_url
+            if 'google_auth_key' in st.session_state:
+                del st.session_state.google_auth_key
+            
+            st.info("🔄 認証状態を自動リセットしました")
             
             # 基本的なアプリケーション機能のみで起動
             try:
