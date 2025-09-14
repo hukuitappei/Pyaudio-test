@@ -452,7 +452,8 @@ class AudioRecorderApp:
             # ページ選択（シンプル化）
             page = st.selectbox(
                 "表示モード",
-                ["メイン（タブ形式）", "クラシック表示"]
+                ["メイン（タブ形式）", "クラシック表示"],
+                key="main_page_selector"
             )
             
             # メインページはタブ形式、他は従来通り
@@ -461,7 +462,8 @@ class AudioRecorderApp:
             else:
                 classic_page = st.selectbox(
                     "クラシック表示ページ",
-                    ["設定", "履歴", "統計", "デバイス管理", "ユーザー辞書", "コマンド管理", "タスク管理", "カレンダー"]
+                    ["設定", "履歴", "統計", "デバイス管理", "ユーザー辞書", "コマンド管理", "タスク管理", "カレンダー"],
+                    key="classic_page_selector"
                 )
                 st.session_state.current_page = classic_page
             
