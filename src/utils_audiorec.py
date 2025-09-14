@@ -1479,6 +1479,26 @@ class GoogleAuthManager:
             st.info("認証情報の設定を確認してください")
             return False
     
+    def _check_credentials_validity(self) -> bool:
+        """認証情報の有効性を確認（副作用なし）"""
+        if not GOOGLE_AUTH_AVAILABLE:
+            return False
+        
+        if not self.credentials:
+            return False
+        
+        # 期限切れでない場合は有効
+        if not self.credentials.expired:
+            return True
+        
+        # 期限切れの場合はリフレッシュトークンがあるかチェック
+        if not self.credentials.refresh_token:
+            return False
+        
+        # リフレッシュトークンがある場合は有効とみなす
+        # 実際の更新は必要時に実行
+        return True
+    
     def _is_credentials_valid(self) -> bool:
         """認証情報の有効性を確認"""
         if not GOOGLE_AUTH_AVAILABLE:
@@ -1716,6 +1736,10 @@ class GoogleAuthManager:
                     st.info("2. Streamlit CloudのSecrets設定でGOOGLE_REFRESH_TOKENに設定")
                     st.info("3. アプリケーションを再起動")
                     
+                    # 認証状態を設定
+                    st.session_state.google_auth_status = True
+                    st.session_state.google_credentials = creds
+                    
                     # セッション状態をクリア
                     if 'google_auth_flow' in st.session_state:
                         del st.session_state.google_auth_flow
@@ -1803,7 +1827,15 @@ class GoogleAuthManager:
     
     def is_authenticated(self) -> bool:
         """認証状態を確認"""
-        return st.session_state.get('google_auth_status', False) and self._is_credentials_valid()
+        # セッション状態の認証フラグを確認
+        if not st.session_state.get('google_auth_status', False):
+            return False
+        
+        # 認証情報の有効性を確認（副作用なし）
+        if not self._check_credentials_validity():
+            return False
+        
+        return True
     
     def logout(self):
         """ログアウト"""
@@ -2220,6 +2252,10 @@ class GoogleCalendarManager:
                             st.info("1. 上記のリフレッシュトークンをコピー")
                             st.info("2. Streamlit CloudのSecrets設定でGOOGLE_REFRESH_TOKENに設定")
                             st.info("3. アプリケーションを再起動")
+                            
+                            # 認証状態を設定
+                            st.session_state.google_auth_status = True
+                            st.session_state.google_credentials = creds
                             
                             return creds
                         else:
