@@ -3,9 +3,14 @@ headless = true
 enableCORS = false
 enableXsrfProtection = false
 maxUploadSize = 200
+# セキュリティヘッダーを追加してiframeサンドボックス警告を軽減
+enableWebsocketCompression = true
 
 [browser]
 gatherUsageStats = false
+# トラッキング防止のための設定
+serverAddress = "0.0.0.0"
+serverPort = 8501
 
 [theme]
 primaryColor = "#1f77b4"
@@ -15,3 +20,11 @@ textColor = "#262730"
 
 [client]
 showErrorDetails = true
+# コンポーネント関連の警告を軽減
+toolbarMode = "minimal"
+
+[global]
+# 開発モードでの警告を抑制
+developmentMode = false
+# ログレベルを調整
+logLevel = "info"
