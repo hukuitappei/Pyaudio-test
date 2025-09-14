@@ -1807,10 +1807,75 @@ def render_calendar_sync_tab(auth_manager):
                     st.error("❌ 認証に失敗しました")
                     st.info("認証情報が正しく設定されているか確認してください")
                     st.info("初回認証の場合は、認証URLをクリックしてGoogle認証画面を開いてください")
+                    
+                    # 認証失敗時のリセットボタン
+                    if st.button("🔄 認証フローをリセット", key="reset_auth_flow_failed"):
+                        try:
+                            # セッション状態をクリア
+                            if 'google_auth_flow' in st.session_state:
+                                del st.session_state.google_auth_flow
+                            if 'google_auth_url' in st.session_state:
+                                del st.session_state.google_auth_url
+                            if 'google_auth_key' in st.session_state:
+                                del st.session_state.google_auth_key
+                            if 'google_credentials' in st.session_state:
+                                del st.session_state.google_credentials
+                            if 'google_auth_status' in st.session_state:
+                                st.session_state.google_auth_status = False
+                            
+                            st.success("✅ 認証フローがリセットされました")
+                            st.info("ページを再読み込みして認証状態を確認してください")
+                            st.rerun()
+                        except Exception as reset_error:
+                            st.error(f"❌ 認証フローリセットエラー: {reset_error}")
             except Exception as e:
                 st.error(f"❌ 認証エラー: {e}")
                 st.info("認証情報の設定を確認してください")
                 st.exception(e)
+                
+                # 認証エラー時のリセットボタン
+                if st.button("🔄 認証フローをリセット", key="reset_auth_flow_error"):
+                    try:
+                        # セッション状態をクリア
+                        if 'google_auth_flow' in st.session_state:
+                            del st.session_state.google_auth_flow
+                        if 'google_auth_url' in st.session_state:
+                            del st.session_state.google_auth_url
+                        if 'google_auth_key' in st.session_state:
+                            del st.session_state.google_auth_key
+                        if 'google_credentials' in st.session_state:
+                            del st.session_state.google_credentials
+                        if 'google_auth_status' in st.session_state:
+                            st.session_state.google_auth_status = False
+                        
+                        st.success("✅ 認証フローがリセットされました")
+                        st.info("ページを再読み込みして認証状態を確認してください")
+                        st.rerun()
+                    except Exception as reset_error:
+                        st.error(f"❌ 認証フローリセットエラー: {reset_error}")
+        
+        # 認証されていない場合のリセットボタン
+        st.subheader("🔧 認証管理")
+        if st.button("🔄 認証フローをリセット", key="reset_auth_flow_not_authenticated"):
+            try:
+                # セッション状態をクリア
+                if 'google_auth_flow' in st.session_state:
+                    del st.session_state.google_auth_flow
+                if 'google_auth_url' in st.session_state:
+                    del st.session_state.google_auth_url
+                if 'google_auth_key' in st.session_state:
+                    del st.session_state.google_auth_key
+                if 'google_credentials' in st.session_state:
+                    del st.session_state.google_credentials
+                if 'google_auth_status' in st.session_state:
+                    st.session_state.google_auth_status = False
+                
+                st.success("✅ 認証フローがリセットされました")
+                st.info("ページを再読み込みして認証状態を確認してください")
+                st.rerun()
+            except Exception as reset_error:
+                st.error(f"❌ 認証フローリセットエラー: {reset_error}")
+        
         return
     
     # イベント一覧表示
