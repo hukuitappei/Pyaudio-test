@@ -1641,7 +1641,6 @@ def render_calendar_sync_tab(auth_manager):
                 error_msg = str(e)
                 if "invalid_grant" in error_msg or "Token has been expired" in error_msg:
                     st.error("❌ トークンが期限切れまたは無効化されています")
-                    st.info("🔑 認証情報の更新が必要です")
                     
                     # 認証状態を即座にリセット
                     st.session_state.google_auth_status = False
@@ -1653,7 +1652,8 @@ def render_calendar_sync_tab(auth_manager):
                     if 'google_auth_key' in st.session_state:
                         del st.session_state.google_auth_key
                     
-                    st.info("🔄 認証状態を自動リセットしました")
+                    st.success("✅ 認証状態を自動リセットしました")
+                    st.info("🔑 新しい認証を実行してください")
                     
                     # 認証情報更新ボタン
                     col1, col2 = st.columns(2)
@@ -1713,6 +1713,9 @@ def render_calendar_sync_tab(auth_manager):
                                                 st.error(f"診断情報の取得に失敗: {diag_error}")
                             except Exception as refresh_error:
                                 st.error(f"❌ 認証情報更新エラー: {refresh_error}")
+                        else:
+                            st.error("❌ 認証情報更新機能が利用できません")
+                            st.info("認証マネージャーにrefresh_credentialsメソッドが存在しません")
                     
                     with col2:
                         if st.button("🔄 認証フローをリセット", key="reset_auth_flow_fixed"):

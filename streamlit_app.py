@@ -771,12 +771,6 @@ def main():
         # Google認証関連のエラーの場合は特別な処理
         if "invalid_grant" in error_msg or "Token has been expired" in error_msg:
             st.error("❌ Google認証エラーが発生しました")
-            st.info("🔑 認証情報の更新が必要です")
-            st.info("以下の手順で問題を解決してください：")
-            st.info("1. カレンダー管理タブに移動")
-            st.info("2. 「🔄 認証フローをリセット」ボタンをクリック")
-            st.info("3. 新しい認証を実行")
-            st.info("4. ページを再読み込み")
             
             # 認証状態を完全にリセット
             st.session_state.google_auth_status = False
@@ -788,7 +782,13 @@ def main():
             if 'google_auth_key' in st.session_state:
                 del st.session_state.google_auth_key
             
-            st.info("🔄 認証状態を自動リセットしました")
+            st.success("✅ 認証状態を自動リセットしました")
+            st.info("🔑 新しい認証を実行してください")
+            st.info("以下の手順で問題を解決してください：")
+            st.info("1. カレンダー管理タブに移動")
+            st.info("2. 「🔐 Googleカレンダー認証」ボタンをクリック")
+            st.info("3. 認証を完了")
+            st.info("4. ページを再読み込み")
             
             # 基本的なアプリケーション機能のみで起動
             try:
